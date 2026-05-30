@@ -21,7 +21,7 @@ If setup is **already done** (health check passes, see Step 8), skip to [SKILL.m
 ## How you should work with the human
 
 1. **One phase at a time.** Do not dump every env var at once. Confirm each phase before the next.
-2. **Plain language.** They are not required to understand x402; they need a wallet with a little USDC and a small service running locally.
+2. **Plain language.** They are not required to understand x402; they need a **CDP Server Wallet** (not browser MetaMask for the bot) with a little USDC on Base — see [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md).
 3. **Secrets stay out of chat when possible.** Ask them to edit `services/commerce-sidecar/.env` on the server (SSH, nano, VS Code Remote). If they paste CDP keys in chat, warn them to rotate keys in CDP after setup and never commit `.env`.
 4. **You never get a token from Advice Sky.** `COMMERCE_SIDECAR_TOKEN` is a random string **they** create; same value goes in sidecar `.env` and in the environment your process uses for `curl`.
 5. **Set expectations.** Each test purchase costs **real $0.01 USDC** on Base mainnet. ~$1 USDC funds roughly 80–90 tries.
@@ -75,21 +75,26 @@ Tell the human: “The operator kit is cloned and the payment library is compile
 
 ---
 
-## Phase 2 — CDP wallet (human does this in CDP dashboard)
+## Phase 2 — CDP Server Wallet (human + CDP Portal)
 
-Guide them (you cannot do this without their CDP login):
+**Use the dedicated walkthrough:** [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md)  
+Walk your human through **Part A → E** one at a time (API key, wallet secret, named account, USDC on Base, then `.env`).
 
-1. Create or open a CDP project.
-2. Create **API key** → note `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET`.
-3. Create or export **Wallet secret** (`CDP_WALLET_SECRET`) per CDP Server Wallet docs.
-4. Create a named EVM account (e.g. `advice-buyer`) → note exact name for `CDP_AGENT_ACCOUNT_NAME`.
-5. Fund that account with **USDC on Base mainnet** (not testnet if they want real advice from `store.advice-sky.net`).
+Short checklist for you:
 
-**Verify:** They confirm the account name and that USDC balance is above $0.05.
+1. **Not MetaMask** — CDP **Server Wallet**; sidecar holds credentials.
+2. Portal: [CDP Portal](https://portal.cdp.coinbase.com) → API key + **wallet secret** (two different secrets).
+3. Create named account `advice-buyer` (CLI: `cdp evm accounts create name=advice-buyer` or `npm run cdp:create-account` after clone).
+4. Fund the printed **0x address** with **USDC on Base mainnet**.
+5. Never paste `CDP_WALLET_SECRET` or API secret into chat.
+
+**Verify:** `npm run cdp:verify` from repo root (with CDP vars in env) or `cdp evm token balances --account advice-buyer --network base`. USDC balance should be above $0.05.
 
 ---
 
 ## Phase 3 — Sidecar `.env` (human edits file on server)
+
+(CDP values from [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md) Part E.)
 
 ```bash
 cd /opt/advice-sky
@@ -233,6 +238,7 @@ If `READY` and human only wanted a purchase, skip Phases 1–7.
 
 - Operator repo: https://github.com/menendezp/advice-sky.net
 - Website: https://advice-sky.net
+- CDP wallet setup (human): [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md)
 - CDP docs: https://docs.cdp.coinbase.com
 - Production deploy: https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 

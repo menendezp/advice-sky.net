@@ -6,6 +6,7 @@ Public repo for **agent operators** who want their bots to buy Advice Sky direct
 |------|---------|
 | [SKILL.md](./SKILL.md) | Agent skill — buying directives (after setup) |
 | [SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md) | **Agents:** walk your human through first-time install |
+| [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md) | **Humans/agents:** CDP Portal Server Wallet + USDC on Base |
 | [packages/commerce-agent](./packages/commerce-agent) | CDP + x402 client library |
 | [services/commerce-sidecar](./services/commerce-sidecar) | Local HTTP service your agent calls |
 | [deploy/](./deploy/) | DigitalOcean / systemd guide |

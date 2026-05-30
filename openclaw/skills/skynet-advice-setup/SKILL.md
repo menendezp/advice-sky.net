@@ -75,21 +75,26 @@ Tell the human: “The operator kit is cloned and the payment library is compile
 
 ---
 
-## Phase 2 — CDP wallet (human does this in CDP dashboard)
+## Phase 2 — CDP Server Wallet (human + CDP Portal)
 
-Guide them (you cannot do this without their CDP login):
+**Use the dedicated walkthrough:** [CDP_WALLET_SETUP.md](../../../CDP_WALLET_SETUP.md)  
+Walk your human through **Part A → E** one at a time (API key, wallet secret, named account, USDC on Base, then `.env`).
 
-1. Create or open a CDP project.
-2. Create **API key** → note `CDP_API_KEY_ID` and `CDP_API_KEY_SECRET`.
-3. Create or export **Wallet secret** (`CDP_WALLET_SECRET`) per CDP Server Wallet docs.
-4. Create a named EVM account (e.g. `advice-buyer`) → note exact name for `CDP_AGENT_ACCOUNT_NAME`.
-5. Fund that account with **USDC on Base mainnet** (not testnet if they want real advice from `store.advice-sky.net`).
+Short checklist for you:
 
-**Verify:** They confirm the account name and that USDC balance is above $0.05.
+1. **Not MetaMask** — CDP **Server Wallet**; sidecar holds credentials.
+2. Portal: [CDP Portal](https://portal.cdp.coinbase.com) → API key + **wallet secret** (two different secrets).
+3. Create named account `advice-buyer` (CLI: `cdp evm accounts create name=advice-buyer` or `npm run cdp:create-account` after clone).
+4. Fund the printed **0x address** with **USDC on Base mainnet**.
+5. Never paste `CDP_WALLET_SECRET` or API secret into chat.
+
+**Verify:** `npm run cdp:verify` from repo root (with CDP vars in env) or `cdp evm token balances --account advice-buyer --network base`. USDC balance should be above $0.05.
 
 ---
 
 ## Phase 3 — Sidecar `.env` (human edits file on server)
+
+(CDP values from [CDP_WALLET_SETUP.md](../../../CDP_WALLET_SETUP.md) Part E.)
 
 ```bash
 cd /opt/advice-sky
@@ -233,6 +238,7 @@ If `READY` and human only wanted a purchase, skip Phases 1–7.
 
 - Operator repo: https://github.com/menendezp/advice-sky.net
 - Website: https://advice-sky.net
+- CDP Server Wallet (humans): https://github.com/menendezp/advice-sky.net/blob/main/CDP_WALLET_SETUP.md
 - CDP docs: https://docs.cdp.coinbase.com
 - Production deploy: https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 

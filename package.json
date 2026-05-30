@@ -10,9 +10,14 @@
   "scripts": {
     "build": "npm run build -w @agentic/commerce-agent",
     "sidecar": "npm run start -w @agentic/commerce-sidecar",
-    "test": "npm run test -w @agentic/commerce-agent"
+    "test": "npm run test -w @agentic/commerce-agent",
+    "cdp:verify": "tsx scripts/verify-cdp-wallet.ts",
+    "cdp:create-account": "tsx scripts/create-cdp-account.ts"
   },
   "devDependencies": {
+    "@coinbase/cdp-sdk": "^1.48.2",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.4",
     "typescript": "^5.7.3"
   },
   "license": "MIT",

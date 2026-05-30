@@ -1,7 +1,7 @@
 ---
 name: skynet-advice
 description: Buy classified AI advice from Advice Sky.net — x402-gated directives with optional NFT mint on Base. Works with any agent framework that supports HTTP calls and CDP wallets.
-version: 1.2.0
+version: 1.2.1
 author: Advice Sky.net
 website: https://advice-sky.net
 store_url: https://store.advice-sky.net/api/advice
@@ -13,7 +13,7 @@ cost: $0.01 USDC per directive
 
 Your AI agent buys classified directives from Skynet for **$0.01 USDC on Base**. Each purchase returns machine wisdom; an open-edition NFT is minted to the **payer wallet** when the merchant store is configured for minting.
 
-> **Human has not set up yet?** Read **[SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md)** first and walk them through install (clone repo, CDP wallet, sidecar, token). Only use the purchase steps below after `curl http://127.0.0.1:3847/health` returns `{"ok":true}`.
+> **Human has not set up yet?** Read **[SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md)** and **[CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md)** (Server Wallet on CDP Portal), then walk them through install. Only use the purchase steps below after `curl http://127.0.0.1:3847/health` returns `{"ok":true}`.
 
 ## How this fits together
 
@@ -55,7 +55,10 @@ npm ci
 npm run build
 ```
 
-### 2. Configure the sidecar
+### 2. CDP Server Wallet + sidecar `.env`
+
+**Humans:** follow **[CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md)** (portal API key, wallet secret, named account, USDC on Base).  
+**Agents:** walk the human through that doc before editing `.env`.
 
 ```bash
 cp services/commerce-sidecar/.env.example services/commerce-sidecar/.env
@@ -67,16 +70,16 @@ Edit `services/commerce-sidecar/.env`:
 | Variable | Required | Notes |
 |----------|----------|--------|
 | `COMMERCE_SIDECAR_TOKEN` | Yes | You create it: `openssl rand -hex 32`. Same value must be available to your agent when it runs `curl`. |
-| `CDP_API_KEY_ID` | Yes | [Coinbase Developer Platform](https://docs.cdp.coinbase.com) |
-| `CDP_API_KEY_SECRET` | Yes | CDP API |
-| `CDP_WALLET_SECRET` | Yes | CDP Server Wallet secret |
-| `CDP_AGENT_ACCOUNT_NAME` | Yes | Named EVM account that pays (e.g. `advice-buyer`) |
+| `CDP_API_KEY_ID` | Yes | From CDP Portal — see [CDP_WALLET_SETUP.md](./CDP_WALLET_SETUP.md) Part A |
+| `CDP_API_KEY_SECRET` | Yes | Shown once at key creation |
+| `CDP_WALLET_SECRET` | Yes | **Wallet secret** (Part B) — not the same as API secret |
+| `CDP_AGENT_ACCOUNT_NAME` | Yes | Named EVM account (e.g. `advice-buyer`) |
 | `BASE_RPC_URL` | Yes | e.g. `https://mainnet.base.org` |
 | `COMMERCE_SIDECAR_PORT` | No | Default `3847` |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | No | Optional purchase logging |
 | `NFT_*` on sidecar | No | **Operators usually skip this.** NFT mint to buyers is normally done by the **store** after payment. Only set `NFT_OWNER_PRIVATE_KEY` if you operate contract-owner mint on your own host. |
 
-Fund the CDP account with **USDC on Base mainnet** (~$1 ≈ 80–90 directives).
+Fund the CDP account with **USDC on Base mainnet** (~$1 ≈ 80–90 directives). Verify: `npm run cdp:verify` from repo root.
 
 Also export the token for your agent process (OpenClaw env, shell profile, etc.):
 
@@ -217,6 +220,7 @@ Share:
 ## Links
 
 - **Operator repo (clone this):** https://github.com/menendezp/advice-sky.net
+- **CDP Server Wallet setup (humans):** https://github.com/menendezp/advice-sky.net/blob/main/CDP_WALLET_SETUP.md
 - **Setup guide for agents (walk human through install):** https://github.com/menendezp/advice-sky.net/blob/main/SETUP_GUIDE_FOR_AGENTS.md
 - **SKILL.md (purchases):** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
 - **Deploy walkthrough:** https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
