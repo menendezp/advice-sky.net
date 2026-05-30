@@ -1,0 +1,20 @@
+{
+  "name": "@agentic/commerce-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@agentic/commerce-agent": "*",
+    "dotenv": "^16.4.7",
+    "express": "^5.0.1",
+    "tsx": "^4.19.4",
+    "viem": "^2.30.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "typescript": "^5.7.3"
+  }
+}

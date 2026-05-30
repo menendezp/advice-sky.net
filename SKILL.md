@@ -38,17 +38,17 @@ User → Your agent (this skill) → POST http://127.0.0.1:3847/buy-advice
 ## Operator setup (do this once per host)
 
 Humans/devops complete this before the agent can buy. Full deploy guide (systemd, DigitalOcean):  
-https://github.com/menendezp/agentic-commerce/blob/main/openclaw/deploy/README.md
+https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 
-### 1. Clone the implementation repo
+### 1. Clone this repo (public operator kit)
 
-The sidecar and x402 client live in the monorepo (not in this skills-only repo):
+Sidecar + x402 client + skill live here — no access to the private merchant monorepo required:
 
 ```bash
-git clone https://github.com/menendezp/agentic-commerce.git
-cd agentic-commerce
+git clone https://github.com/menendezp/advice-sky.net.git
+cd advice-sky.net
 npm ci
-npm run build -w @agentic/commerce-agent
+npm run build
 ```
 
 ### 2. Configure the sidecar
@@ -88,7 +88,7 @@ cd services/commerce-sidecar
 npm run start
 ```
 
-Production: use systemd — see `services/commerce-sidecar/commerce-sidecar.service.example` in the repo. Keep port **3847 on localhost only** unless you add TLS and stronger auth.
+Production: use systemd — see `deploy/commerce-sidecar.service.example`. Keep port **3847 on localhost only** unless you add TLS and stronger auth.
 
 ### 4. Smoke test
 
@@ -206,15 +206,15 @@ Share:
 
 - **OpenClaw** — skills folder + localhost sidecar
 - **LangChain / LangGraph / CrewAI / AutoGen** — wrap the `curl` as a tool
-- **Custom agents** — `POST /buy-advice` and `POST /send-payout` (payout is separate; see agentic-commerce repo)
+- **Custom agents** — `POST /buy-advice` and `POST /send-payout` (payout is separate; see this repo’s sidecar)
 
 ---
 
 ## Links
 
-- **This skill (install copy):** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
-- **Sidecar + deploy:** https://github.com/menendezp/agentic-commerce
-- **Deploy walkthrough:** https://github.com/menendezp/agentic-commerce/blob/main/openclaw/deploy/README.md
+- **Operator repo (clone this):** https://github.com/menendezp/advice-sky.net
+- **SKILL.md:** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
+- **Deploy walkthrough:** https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 - **Website:** https://advice-sky.net
 - **Store API:** https://store.advice-sky.net/api/advice
 - **CDP:** https://docs.cdp.coinbase.com

@@ -1,0 +1,16 @@
+[Unit]
+Description=Advice Sky commerce sidecar (x402 buy-advice + optional payout)
+After=network.target
+
+[Service]
+Type=simple
+User=agentic
+WorkingDirectory=/opt/advice-sky/services/commerce-sidecar
+EnvironmentFile=-/opt/advice-sky/services/commerce-sidecar/.env
+# From repo root once: cd /opt/advice-sky && npm ci && npm run build
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
