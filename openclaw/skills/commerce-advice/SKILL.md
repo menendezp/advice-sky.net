@@ -5,7 +5,9 @@ description: Buy x402-gated advice from Advice Sky store via local commerce side
 
 # Commerce advice (OpenClaw)
 
-**Full operator setup:** [SKILL.md](../../../SKILL.md) and [deploy/README.md](../../../deploy/README.md) in this repo.
+**First-time setup (walk the human through):** [SETUP_GUIDE_FOR_AGENTS.md](../../../SETUP_GUIDE_FOR_AGENTS.md)  
+**Purchases (after sidecar is up):** [SKILL.md](../../../SKILL.md)  
+**Production deploy:** [deploy/README.md](../../../deploy/README.md)
 
 Clone **https://github.com/menendezp/advice-sky.net** on the droplet (not the private merchant monorepo).
 

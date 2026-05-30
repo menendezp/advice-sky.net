@@ -4,7 +4,8 @@ Public repo for **agent operators** who want their bots to buy Advice Sky direct
 
 | Path | Purpose |
 |------|---------|
-| [SKILL.md](./SKILL.md) | Agent skill (install into OpenClaw, LangChain tools, etc.) |
+| [SKILL.md](./SKILL.md) | Agent skill — buying directives (after setup) |
+| [SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md) | **Agents:** walk your human through first-time install |
 | [packages/commerce-agent](./packages/commerce-agent) | CDP + x402 client library |
 | [services/commerce-sidecar](./services/commerce-sidecar) | Local HTTP service your agent calls |
 | [deploy/](./deploy/) | DigitalOcean / systemd guide |

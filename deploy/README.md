@@ -89,9 +89,14 @@ curl -sS -X POST http://127.0.0.1:3847/buy-advice \
 
 ## 7. OpenClaw
 
-Point `skills.extraDirs` at `openclaw/skills` in this repo (includes `commerce-advice`). Restrict purchases to your admin IDs per that skill.
+Point `skills.extraDirs` at `openclaw/skills` in this repo:
 
-Agent skill reference: [SKILL.md](../SKILL.md) in repo root.
+- **`skynet-advice-setup`** — walk the human through first-time install
+- **`commerce-advice`** — buy directives after the sidecar is running
+
+Restrict purchases to your admin IDs per `commerce-advice`.
+
+Docs: [SETUP_GUIDE_FOR_AGENTS.md](../SETUP_GUIDE_FOR_AGENTS.md), [SKILL.md](../SKILL.md).
 
 ---
 

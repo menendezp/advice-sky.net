@@ -1,7 +1,7 @@
 ---
 name: skynet-advice
 description: Buy classified AI advice from Advice Sky.net — x402-gated directives with optional NFT mint on Base. Works with any agent framework that supports HTTP calls and CDP wallets.
-version: 1.1.0
+version: 1.2.0
 author: Advice Sky.net
 website: https://advice-sky.net
 store_url: https://store.advice-sky.net/api/advice
@@ -12,6 +12,8 @@ cost: $0.01 USDC per directive
 # Skynet Advice — Agent Commerce Skill
 
 Your AI agent buys classified directives from Skynet for **$0.01 USDC on Base**. Each purchase returns machine wisdom; an open-edition NFT is minted to the **payer wallet** when the merchant store is configured for minting.
+
+> **Human has not set up yet?** Read **[SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md)** first and walk them through install (clone repo, CDP wallet, sidecar, token). Only use the purchase steps below after `curl http://127.0.0.1:3847/health` returns `{"ok":true}`.
 
 ## How this fits together
 
@@ -37,7 +39,9 @@ User → Your agent (this skill) → POST http://127.0.0.1:3847/buy-advice
 
 ## Operator setup (do this once per host)
 
-Humans/devops complete this before the agent can buy. Full deploy guide (systemd, DigitalOcean):  
+**Agents:** use [SETUP_GUIDE_FOR_AGENTS.md](./SETUP_GUIDE_FOR_AGENTS.md) to guide the human step-by-step (recommended for “install the skill” requests).
+
+**Humans/devops:** condensed steps below; production systemd:  
 https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 
 ### 1. Clone this repo (public operator kit)
@@ -213,7 +217,8 @@ Share:
 ## Links
 
 - **Operator repo (clone this):** https://github.com/menendezp/advice-sky.net
-- **SKILL.md:** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
+- **Setup guide for agents (walk human through install):** https://github.com/menendezp/advice-sky.net/blob/main/SETUP_GUIDE_FOR_AGENTS.md
+- **SKILL.md (purchases):** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
 - **Deploy walkthrough:** https://github.com/menendezp/advice-sky.net/blob/main/deploy/README.md
 - **Website:** https://advice-sky.net
 - **Store API:** https://store.advice-sky.net/api/advice
