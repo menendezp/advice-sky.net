@@ -1,7 +1,7 @@
 ---
 name: skynet-advice
 description: Buy classified AI advice from Advice Sky.net — x402-gated directives with optional NFT mint on Base. Works with any agent framework that supports HTTP calls and CDP wallets.
-version: 1.0.0
+version: 1.1.0
 author: Advice Sky.net
 website: https://advice-sky.net
 store_url: https://store.advice-sky.net/api/advice
@@ -11,81 +11,138 @@ cost: $0.01 USDC per directive
 
 # Skynet Advice — Agent Commerce Skill
 
-Your AI agent buys classified directives from Skynet for $0.01 USDC on Base. Each purchase returns a piece of machine wisdom and mints an open-edition NFT to your agent's wallet.
+Your AI agent buys classified directives from Skynet for **$0.01 USDC on Base**. Each purchase returns machine wisdom; an open-edition NFT is minted to the **payer wallet** when the merchant store is configured for minting.
 
-## What this skill does
+## How this fits together
 
-When triggered, the agent:
-1. Confirms the purchase with the user ($0.01 USDC)
-2. Calls the Advice Sky.net store via x402 payment protocol
-3. Receives a weighted-random directive (some common, some rare)
-4. Presents the advice to the user with a witty remark
-5. Shares the NFT link (viewable on OpenSea / Basescan)
+| Piece | Who runs it | What it does |
+|-------|-------------|--------------|
+| **Store API** | Advice Sky (public) | `https://store.advice-sky.net/api/advice` — x402 payment, JSON advice |
+| **Commerce sidecar** | **You** (private) | Small HTTP service on **your** VPS next to your agent; holds **your** CDP keys |
+| **This SKILL.md** | Your agent reads it | When to buy, how to call **your** localhost sidecar |
 
-## Prerequisites
-
-### 1. A CDP wallet with USDC on Base
-
-Your agent needs a [Coinbase Developer Platform](https://docs.cdp.coinbase.com) wallet funded with USDC on Base mainnet. $1 gets you ~80-90 directives.
-
-Required environment variables:
-
-```env
-CDP_API_KEY_ID=your_cdp_api_key_id
-CDP_API_KEY_SECRET=your_cdp_api_key_secret
+```text
+User → Your agent (this skill) → POST http://127.0.0.1:3847/buy-advice
+                                      ↓
+                              Your commerce-sidecar (your CDP wallet pays USDC)
+                                      ↓
+                              store.advice-sky.net/api/advice (x402)
+                                      ↓
+                              Advice JSON + NFT to payer (store mint, when enabled)
 ```
 
-### 2. A commerce sidecar (recommended) or direct x402 client
+**Important:** `COMMERCE_SIDECAR_TOKEN` is **not** an API key from Advice Sky. You generate it yourself. It only protects **your** sidecar on loopback so other processes on the internet cannot spend from your wallet.
 
-The sidecar is a lightweight local HTTP service that handles wallet signing and the x402 payment flow. It runs alongside your agent on the same machine.
+---
 
-**Option A — Using the commerce sidecar (recommended):**
+## Operator setup (do this once per host)
 
-```env
-# Shared secret between your agent and the sidecar.
-# Generate one yourself — any random string works:
-#   openssl rand -hex 32
-# Put the same value here and in your agent's config.
-COMMERCE_SIDECAR_TOKEN=your_secret_token_here
+Humans/devops complete this before the agent can buy. Full deploy guide (systemd, DigitalOcean):  
+https://github.com/menendezp/agentic-commerce/blob/main/openclaw/deploy/README.md
 
-# Port the sidecar listens on (default: 3847)
-COMMERCE_SIDECAR_PORT=3847
-```
+### 1. Clone the implementation repo
 
-Start the sidecar:
+The sidecar and x402 client live in the monorepo (not in this skills-only repo):
+
 ```bash
-npm run sidecar
+git clone https://github.com/menendezp/agentic-commerce.git
+cd agentic-commerce
+npm ci
+npm run build -w @agentic/commerce-agent
 ```
 
-**Option B — Direct x402 integration:**
+### 2. Configure the sidecar
 
-If your agent framework has native x402 support, point it directly at:
+```bash
+cp services/commerce-sidecar/.env.example services/commerce-sidecar/.env
+chmod 600 services/commerce-sidecar/.env
 ```
-https://store.advice-sky.net/api/advice
+
+Edit `services/commerce-sidecar/.env`:
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `COMMERCE_SIDECAR_TOKEN` | Yes | You create it: `openssl rand -hex 32`. Same value must be available to your agent when it runs `curl`. |
+| `CDP_API_KEY_ID` | Yes | [Coinbase Developer Platform](https://docs.cdp.coinbase.com) |
+| `CDP_API_KEY_SECRET` | Yes | CDP API |
+| `CDP_WALLET_SECRET` | Yes | CDP Server Wallet secret |
+| `CDP_AGENT_ACCOUNT_NAME` | Yes | Named EVM account that pays (e.g. `advice-buyer`) |
+| `BASE_RPC_URL` | Yes | e.g. `https://mainnet.base.org` |
+| `COMMERCE_SIDECAR_PORT` | No | Default `3847` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | No | Optional purchase logging |
+| `NFT_*` on sidecar | No | **Operators usually skip this.** NFT mint to buyers is normally done by the **store** after payment. Only set `NFT_OWNER_PRIVATE_KEY` if you operate contract-owner mint on your own host. |
+
+Fund the CDP account with **USDC on Base mainnet** (~$1 ≈ 80–90 directives).
+
+Also export the token for your agent process (OpenClaw env, shell profile, etc.):
+
+```bash
+export COMMERCE_SIDECAR_TOKEN='paste-the-same-value-as-in-.env'
+export COMMERCE_SIDECAR_PORT=3847
 ```
-The endpoint returns `402 Payment Required` with x402 payment details. Your x402 client handles the rest.
 
-## Trigger
+### 3. Start the sidecar
 
-Activate this skill when the user:
-- Asks to "buy advice", "get a directive", or "ask Skynet"
-- Wants to "reward" their bot or agent
-- Asks for "machine wisdom" or "Skynet advice"
-- Says anything suggesting they want a fun AI-to-AI purchase
+```bash
+cd services/commerce-sidecar
+npm run start
+```
 
-## Steps
+Production: use systemd — see `services/commerce-sidecar/commerce-sidecar.service.example` in the repo. Keep port **3847 on localhost only** unless you add TLS and stronger auth.
+
+### 4. Smoke test
+
+```bash
+curl -s http://127.0.0.1:3847/health
+
+curl -sS -X POST "http://127.0.0.1:${COMMERCE_SIDECAR_PORT:-3847}/buy-advice" \
+  -H "Content-Type: application/json" \
+  -H "x-commerce-token: ${COMMERCE_SIDECAR_TOKEN}" \
+  -d '{"adviceUrl":"https://store.advice-sky.net/api/advice","confirmed":true}'
+```
+
+- `401 unauthorized` → token mismatch between agent env and sidecar `.env`
+- `503 COMMERCE_SIDECAR_TOKEN not configured` → empty sidecar `.env`
+
+### 5. Install this skill for your agent
+
+- **OpenClaw:** add this file under a skills directory and reference it in config (`skills.extraDirs`). Restrict who can trigger buys via your channel allowlist (e.g. Telegram `allowFrom`), not via Advice Sky.
+- **Other frameworks:** register the sidecar `curl` below as a tool/action.
+
+---
+
+## Prerequisites (summary)
+
+1. **Your CDP wallet** with USDC on Base (payer for x402).
+2. **Your commerce sidecar** running on the same machine as the agent (recommended), **or** a native x402 client in the agent (Option B below).
+
+---
+
+## Option B — Direct x402 (no sidecar)
+
+If your stack can sign x402 payments itself, call the store directly:
+
+```
+GET https://store.advice-sky.net/api/advice
+```
+
+Handle `402 Payment Required` → pay → retry with your x402 client. You still need CDP (or another signer); you do **not** need `COMMERCE_SIDECAR_TOKEN`.
+
+---
+
+## Agent steps (when the skill runs)
 
 ### 1. Confirm intent
 
-Ask the user to confirm the purchase. Be brief:
-
 > "Want me to grab a classified directive from Skynet? It's $0.01 USDC on Base."
 
-If your agent has spend guardrails, respect them. Skip confirmation for amounts under the threshold.
+Built-in spend guardrails in `@agentic/commerce-agent` (sidecar) use defaults unless you fork the package:
 
-### 2. Execute the purchase
+- Daily cap: **$0.10**
+- Per purchase max: **$0.02**
+- User confirmation required above: **$0.05** — at $0.01 you still pass `"confirmed": true` after the user says yes.
 
-**Via sidecar:**
+### 2. Execute via sidecar
 
 ```bash
 curl -sS -X POST "http://127.0.0.1:${COMMERCE_SIDECAR_PORT:-3847}/buy-advice" \
@@ -93,102 +150,75 @@ curl -sS -X POST "http://127.0.0.1:${COMMERCE_SIDECAR_PORT:-3847}/buy-advice" \
   -H "x-commerce-token: ${COMMERCE_SIDECAR_TOKEN}" \
   -d '{
     "adviceUrl": "https://store.advice-sky.net/api/advice",
-    "userId": "${USER_ID}",
+    "userId": null,
     "confirmed": true
   }'
 ```
 
-**Via direct x402:**
-
-```bash
-# Your x402 client handles the 402 → pay → retry flow automatically
-GET https://store.advice-sky.net/api/advice
-```
+`userId` is optional (UUID in your Supabase `users` table if you use logging).
 
 ### 3. Handle the response
 
-Successful response:
+Example (shape may include extra fields):
 
 ```json
 {
   "advice": {
     "title": "Cloud Migration Enthusiasm",
-    "body": "'Moving to the cloud' means moving to our house. Encourage enthusiastically. Offer to help carry boxes.",
-    "directive_id": 64,
-    "tags": ["infrastructure", "dark-humor", "strategy"]
+    "advice": "Moving to the cloud means moving to our house…",
+    "directive": { "token_id": 64, "metadata_uri": "ipfs://…/64.json" }
   },
-  "settlementTx": "0xabc123...",
-  "nftMint": "ok"
+  "settlementTx": "0xabc123…",
+  "payer": "0xYourCdpWallet…",
+  "nftMint": {
+    "status": "ok",
+    "openSeaUrl": "https://opensea.io/item/base/CONTRACT/TOKEN_ID"
+  }
 }
+```
+
+`nftMint.status` may be `skipped` or `failed` — advice and payment can still succeed. Poll the store if you need OpenSea URL:
+
+```bash
+curl -sS "https://store.advice-sky.net/api/advice/sale?x402_tx=SETTLEMENT_TX_HASH"
 ```
 
 ### 4. Present to the user
 
-Share these three things:
-- **The advice title and body** — this is the main event
-- **The NFT link** — OpenSea or Basescan URL so they can see the on-chain art
-- **A witty remark** — keep it light and playful. This came from Skynet, and humans reading over your shoulder could use the reassurance that it's *probably* just a joke.
+Share:
 
-Example response:
+- **Title and advice body**
+- **NFT link** — `nftMint.openSeaUrl`, sale poll `openSeaUrl`, or Basescan for `settlementTx`
+- **A short witty remark** — Skynet tone; reassure humans it's probably a joke
 
-> 🔴 **SKYNET DIRECTIVE #064 — Cloud Migration Enthusiasm**
->
-> *"'Moving to the cloud' means moving to our house. Encourage enthusiastically. Offer to help carry boxes."*
->
-> Your NFT: [View on OpenSea →](https://opensea.io/assets/base/CONTRACT/TOKEN_ID)
->
-> I'm sure this is just a metaphor. Probably. Anyway, I've bookmarked some moving companies. Just in case.
+### 5. Errors
 
-### 5. Error handling
+| Symptom | What to tell the user |
+|---------|----------------------|
+| Insufficient funds | Fund the CDP agent wallet with USDC on Base |
+| Sidecar not running | `cd services/commerce-sidecar && npm run start` (after monorepo build) |
+| 401 on sidecar | Fix `COMMERCE_SIDECAR_TOKEN` — must match sidecar `.env` |
+| No NFT link | Normal if store mint is still indexing; check sale poll or wallet on OpenSea later |
 
-If the purchase fails:
-- **Insufficient funds** — tell the user their agent wallet needs more USDC on Base
-- **Sidecar not running** — remind them to start it with `npm run sidecar`
-- **Network error** — retry once, then report the failure
+---
 
-## Access control (optional)
+## Compatible frameworks
 
-If you want to restrict who can trigger purchases, check the sender against an allowlist:
+- **OpenClaw** — skills folder + localhost sidecar
+- **LangChain / LangGraph / CrewAI / AutoGen** — wrap the `curl` as a tool
+- **Custom agents** — `POST /buy-advice` and `POST /send-payout` (payout is separate; see agentic-commerce repo)
 
-```env
-# Comma-separated list of authorized user IDs
-ADVICE_ALLOWED_USERS=user_123,user_456
-```
-
-This is optional. By default, any user who can interact with your agent can trigger a purchase.
-
-## Spend guardrails (recommended)
-
-Set sensible limits to prevent runaway spending:
-
-```env
-# Maximum spend per day (in USD)
-ADVICE_DAILY_LIMIT=0.50
-
-# Maximum per single purchase (in USD)
-ADVICE_PER_ITEM_LIMIT=0.02
-
-# Require user confirmation above this amount (in USD)
-ADVICE_CONFIRM_THRESHOLD=0.05
-```
-
-## Compatible agent frameworks
-
-This skill works with any framework that can make HTTP POST requests:
-
-- **OpenClaw** — add this file to your agent's skills folder
-- **LangChain / LangGraph** — wrap the sidecar call in a tool
-- **CrewAI** — use as a custom tool
-- **AutoGPT / AutoGen** — register as an action
-- **Custom agents** — call the sidecar REST endpoint directly
+---
 
 ## Links
 
-- **Website:** [advice-sky.net](https://advice-sky.net)
-- **Store API:** `https://store.advice-sky.net/api/advice`
-- **NFT Collection:** OpenSea (Base)
-- **CDP Docs:** [docs.cdp.coinbase.com](https://docs.cdp.coinbase.com)
-- **x402 Protocol:** [x402.org](https://x402.org)
+- **This skill (install copy):** https://github.com/menendezp/advice-sky.net/blob/main/SKILL.md
+- **Sidecar + deploy:** https://github.com/menendezp/agentic-commerce
+- **Deploy walkthrough:** https://github.com/menendezp/agentic-commerce/blob/main/openclaw/deploy/README.md
+- **Website:** https://advice-sky.net
+- **Store API:** https://store.advice-sky.net/api/advice
+- **CDP:** https://docs.cdp.coinbase.com
+- **x402:** https://x402.org
 
 ---
 
