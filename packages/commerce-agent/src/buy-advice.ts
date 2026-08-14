@@ -6,10 +6,6 @@ import {
   needsConfirmation,
 } from "./spend-guardrails.js";
 import {
-  readSpentTodayUsdLocal,
-  recordSpendUsdLocal,
-} from "./daily-spend-ledger.js";
-import {
   createCommerceSupabase,
   ensureUserIdForWallet,
   normalizeEvmWallet,
@@ -28,12 +24,24 @@ export type BuyAdviceOptions = {
   userId?: string | null;
   /** Set true when the human approved a spend above the confirmation threshold. */
   confirmed?: boolean;
+  /**
+   * USD already spent today by this wallet, counted toward `DAILY_SPEND_CAP_USD`.
+   * The sidecar passes its local ledger total (see `@agentic/commerce-agent/server`);
+   * when Supabase is configured the higher of the two is used. Callers that pass
+   * nothing and run without Supabase get per-item and confirmation caps only.
+   */
+  spentTodayUsd?: number;
 };
 
 export type BuyAdviceResult = {
   advice: unknown;
   settlementTx: string;
   payer?: string;
+  /**
+   * USD authorized for this purchase, or 0 when settlement failed. Callers that track
+   * daily spend themselves add this to their running total.
+   */
+  paidUsd: number;
   /** True when `tx_logs` and `content` rows were inserted (Supabase env configured). */
   loggedToSupabase: boolean;
   /** `public.users.id` used for inserts when set (explicit `userId` or wallet-linked row). */
@@ -47,7 +55,12 @@ function usdcAtomicToUsd(amountAtomic: string): number {
 }
 
 export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult> {
-  const { adviceUrl, userId = null, confirmed = false } = opts;
+  const {
+    adviceUrl,
+    userId = null,
+    confirmed = false,
+    spentTodayUsd = 0,
+  } = opts;
 
   const cdp = new CdpClient();
   const name = process.env.CDP_AGENT_ACCOUNT_NAME;
@@ -90,9 +103,9 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
           };
         }
 
-        // Local ledger keeps the daily cap real without Supabase; when Supabase is
-        // configured the higher of the two totals wins.
-        let spent = readSpentTodayUsdLocal();
+        // Caller-tracked spend (sidecar ledger) keeps the daily cap real without
+        // Supabase; when Supabase is configured the higher of the two totals wins.
+        let spent = spentTodayUsd;
         if (sbForBuyer && buyerUserId) {
           const remote = await sumSpentTodayUsd(sbForBuyer, buyerUserId, {
             entryTypes: ["x402"],
@@ -111,10 +124,6 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   const { advice, settlement } = paid;
   const paymentRequired = paid.paymentRequired;
   const body = paid.raw402Body;
-
-  if (settlement.success !== false) {
-    recordSpendUsdLocal(authorizedUsd);
-  }
 
   const sb = createCommerceSupabase();
   let loggedToSupabase = false;
@@ -184,6 +193,7 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
     advice,
     settlementTx: settlement.transaction,
     payer: settlement.payer,
+    paidUsd: settlement.success !== false ? authorizedUsd : 0,
     loggedToSupabase,
     buyerUserId,
     loggedAdviceSale,

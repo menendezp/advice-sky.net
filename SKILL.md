@@ -136,6 +136,8 @@ GET https://store.advice-sky.net/api/advice
 
 Handle `402 Payment Required` → pay → retry with your x402 client. You still need CDP (or another signer); you do **not** need `COMMERCE_SIDECAR_TOKEN`.
 
+**Guardrails are yours to enforce on this path.** The daily cap below is applied by the sidecar, which tracks spend and passes the running total to `buyAdvice` as `spentTodayUsd`. Calling `buyAdvice` directly without that (or bypassing the package entirely) leaves only the per-item and confirmation caps. Server-side callers can reuse the ledger: `import { readSpentTodayUsdLocal, recordSpendUsdLocal } from "@agentic/commerce-agent/server"` — it is kept out of the main entry point because it uses `node:fs` and the package is also imported by browser code.
+
 ---
 
 ## Agent steps (when the skill runs)
@@ -146,7 +148,7 @@ Handle `402 Payment Required` → pay → retry with your x402 client. You still
 
 Built-in spend guardrails in `@agentic/commerce-agent` (sidecar) use defaults unless you fork the package:
 
-- Daily cap: **$0.10** — settled purchases are recorded in a local ledger (`~/.advice-sky/x402-spend.json`, override with `COMMERCE_SPEND_LEDGER_PATH`), so the cap holds with or without Supabase. When Supabase is configured, the higher of the two daily totals is used. Delete the ledger file and today's count resets, so treat it as a guardrail, not a vault.
+- Daily cap: **$0.10** — the sidecar records settled purchases in a local ledger (`~/.advice-sky/x402-spend.json`, override with `COMMERCE_SPEND_LEDGER_PATH`) and feeds the total back on the next buy, so the cap holds with or without Supabase. When Supabase is configured, the higher of the two daily totals is used. Delete the ledger file and today's count resets, so treat it as a guardrail, not a vault.
 - Per purchase max: **$0.02**
 - User confirmation required above: **$0.05** — at $0.01 the code does not require it, but keep passing `"confirmed": true` after the user says yes so the same call still works if pricing changes.
 

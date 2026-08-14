@@ -34,12 +34,10 @@ export {
   payoutPerTransferCapUsd,
   type GuardrailResult,
 } from "./spend-guardrails.js";
-export {
-  readSpentTodayUsdLocal,
-  recordSpendUsdLocal,
-  spendLedgerPath,
-  utcDayKey,
-} from "./daily-spend-ledger.js";
+// The daily-spend ledger is deliberately absent from this barrel and from buy-advice.ts:
+// it imports node:fs, and this barrel is pulled into browser chunks by "use client"
+// components in apps/web. Server callers import it from "@agentic/commerce-agent/server"
+// and pass the total to buyAdvice as `spentTodayUsd`.
 export {
   createCommerceSupabase,
   ensureUserIdForWallet,

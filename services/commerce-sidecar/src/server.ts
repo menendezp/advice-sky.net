@@ -7,6 +7,10 @@
 import "dotenv/config";
 import express from "express";
 import { buyAdvice, sendUsdcPayout } from "@agentic/commerce-agent";
+import {
+  readSpentTodayUsdLocal,
+  recordSpendUsdLocal,
+} from "@agentic/commerce-agent/server";
 import { mintSkynetDirectiveAfterBuyAdvice } from "./mint-after-buy-advice.js";
 import { nftMintPhase2EnvSummary } from "./nft-phase2-placeholder.js";
 
@@ -43,7 +47,14 @@ app.post("/buy-advice", auth, async (req, res) => {
     return;
   }
   try {
-    const result = await buyAdvice({ adviceUrl, userId: userId ?? null, confirmed });
+    // The ledger is what makes DAILY_SPEND_CAP_USD hold without Supabase.
+    const result = await buyAdvice({
+      adviceUrl,
+      userId: userId ?? null,
+      confirmed,
+      spentTodayUsd: readSpentTodayUsdLocal(),
+    });
+    recordSpendUsdLocal(result.paidUsd);
     const nftMint = await mintSkynetDirectiveAfterBuyAdvice({
       advice: result.advice,
       payer: result.payer,
