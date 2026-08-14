@@ -35,6 +35,12 @@ export {
   type GuardrailResult,
 } from "./spend-guardrails.js";
 export {
+  readSpentTodayUsdLocal,
+  recordSpendUsdLocal,
+  spendLedgerPath,
+  utcDayKey,
+} from "./daily-spend-ledger.js";
+export {
   createCommerceSupabase,
   ensureUserIdForWallet,
   normalizeEvmWallet,

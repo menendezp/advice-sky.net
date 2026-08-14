@@ -5,7 +5,7 @@ description: Walk your human through installing the Advice Sky commerce sidecar 
 
 # Setup guide for agents (walk your human through this)
 
-**Audience:** You (the AI agent). **Goal:** Get your human’s host ready so you can run [SKILL.md](./SKILL.md) and buy directives for $0.01 USDC.
+**Audience:** You (the AI agent). **Goal:** Get your human’s host ready so you can run [SKILL.md](../../../SKILL.md) and buy directives for $0.01 USDC.
 
 Read this file when the human says things like:
 
@@ -14,7 +14,7 @@ Read this file when the human says things like:
 - “Help me configure the commerce sidecar”
 - “I cloned advice-sky.net — what now?”
 
-If setup is **already done** (health check passes, see Step 8), skip to [SKILL.md](./SKILL.md) for purchase flow only.
+If setup is **already done** (health check passes, see Step 8), skip to [SKILL.md](../../../SKILL.md) for purchase flow only.
 
 ---
 
@@ -52,7 +52,7 @@ Ask the human to confirm:
 | 0.4 | Willingness to fund an agent wallet with **USDC on Base** (start with ~$1) | Yes |
 | 0.5 | SSH or shell access to that machine | Yes |
 
-If they only use a laptop that sleeps, suggest a small VPS (DigitalOcean, etc.) — point to [deploy/README.md](./deploy/README.md) for systemd.
+If they only use a laptop that sleeps, suggest a small VPS (DigitalOcean, etc.) — point to [deploy/README.md](../../../deploy/README.md) for systemd.
 
 ---
 
@@ -149,7 +149,7 @@ cd /opt/advice-sky/services/commerce-sidecar
 npm run start
 ```
 
-**Production:** [deploy/README.md](./deploy/README.md) — systemd unit at `deploy/commerce-sidecar.service.example`.
+**Production:** [deploy/README.md](../../../deploy/README.md) — systemd unit at `deploy/commerce-sidecar.service.example`.
 
 **Verify:**
 
@@ -170,8 +170,8 @@ Tell the human how **you** load skills in their stack:
 | Framework | Action |
 |-----------|--------|
 | **OpenClaw** | Add `openclaw/skills` to `skills.extraDirs` — enables **`skynet-advice-setup`** (this guide) and **`commerce-advice`** (purchases) |
-| **LangChain / CrewAI / etc.** | Register [SKILL.md](./SKILL.md) as tool instructions or copy purchase `curl` into a tool |
-| **Raw** | Keep [SKILL.md](./SKILL.md) in context when buying |
+| **LangChain / CrewAI / etc.** | Register [SKILL.md](../../../SKILL.md) as tool instructions or copy purchase `curl` into a tool |
+| **Raw** | Keep [SKILL.md](../../../SKILL.md) in context when buying |
 
 Also add **this file** (`SETUP_GUIDE_FOR_AGENTS.md`) if they want you to help others later.
 
@@ -209,7 +209,7 @@ curl -sS -X POST "http://127.0.0.1:${COMMERCE_SIDECAR_PORT:-3847}/buy-advice" \
 When health check passes and (optionally) smoke purchase works:
 
 1. Tell the human setup is complete.
-2. Follow [SKILL.md](./SKILL.md) when they ask for advice — confirm $0.01, then `POST /buy-advice`.
+2. Follow [SKILL.md](../../../SKILL.md) when they ask for advice — confirm $0.01, then `POST /buy-advice`.
 3. Present advice + OpenSea link + short witty remark.
 
 ---

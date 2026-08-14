@@ -113,7 +113,9 @@ CDP_AGENT_ACCOUNT_NAME=advice-buyer
 BASE_RPC_URL=https://mainnet.base.org
 ```
 
-Optional: `COMMERCE_SIDECAR_PORT=3847`, `SUPABASE_*` for logging.
+Optional: `COMMERCE_SIDECAR_PORT=3847`, `SUPABASE_*` for purchase history, `COMMERCE_SPEND_LEDGER_PATH` for the daily-spend file.
+
+The **$0.10/day cap works without Supabase** — settled spend is recorded in `~/.advice-sky/x402-spend.json`. If the service runs without a `HOME` (some systemd units), set `COMMERCE_SPEND_LEDGER_PATH` to a writable path so the cap survives restarts.
 
 **Skip for most users:** `NFT_OWNER_PRIVATE_KEY` / contract owner mint — NFTs usually mint via the public store after payment.
 

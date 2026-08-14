@@ -6,6 +6,10 @@ import {
   needsConfirmation,
 } from "./spend-guardrails.js";
 import {
+  readSpentTodayUsdLocal,
+  recordSpendUsdLocal,
+} from "./daily-spend-ledger.js";
+import {
   createCommerceSupabase,
   ensureUserIdForWallet,
   normalizeEvmWallet,
@@ -62,6 +66,9 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   const rpcUrl = process.env.BASE_RPC_URL;
   const evmSigner = cdpAccountToX402Signer(account);
 
+  /** USD authorized by the guardrail hook, recorded in the local ledger once settled. */
+  let authorizedUsd = 0;
+
   const paid = await fetchPaidAdviceX402({
     adviceUrl,
     signer: evmSigner,
@@ -83,14 +90,19 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
           };
         }
 
+        // Local ledger keeps the daily cap real without Supabase; when Supabase is
+        // configured the higher of the two totals wins.
+        let spent = readSpentTodayUsdLocal();
         if (sbForBuyer && buyerUserId) {
-          const spent = await sumSpentTodayUsd(sbForBuyer, buyerUserId, {
+          const remote = await sumSpentTodayUsd(sbForBuyer, buyerUserId, {
             entryTypes: ["x402"],
           });
-          const daily = assertDailyCap(spent, usd);
-          if (!daily.ok) return { abort: true, reason: daily.reason };
+          spent = Math.max(spent, remote);
         }
+        const daily = assertDailyCap(spent, usd);
+        if (!daily.ok) return { abort: true, reason: daily.reason };
 
+        authorizedUsd = usd;
         return;
       });
     },
@@ -99,6 +111,10 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   const { advice, settlement } = paid;
   const paymentRequired = paid.paymentRequired;
   const body = paid.raw402Body;
+
+  if (settlement.success !== false) {
+    recordSpendUsdLocal(authorizedUsd);
+  }
 
   const sb = createCommerceSupabase();
   let loggedToSupabase = false;

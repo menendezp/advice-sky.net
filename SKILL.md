@@ -76,7 +76,8 @@ Edit `services/commerce-sidecar/.env`:
 | `CDP_AGENT_ACCOUNT_NAME` | Yes | Named EVM account (e.g. `advice-buyer`) |
 | `BASE_RPC_URL` | Yes | e.g. `https://mainnet.base.org` |
 | `COMMERCE_SIDECAR_PORT` | No | Default `3847` |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | No | Optional purchase logging |
+| `COMMERCE_SPEND_LEDGER_PATH` | No | Where daily spend is recorded. Default `~/.advice-sky/x402-spend.json` — set it when the service runs without a `HOME` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | No | Optional purchase logging. Skipping it does **not** disable the daily cap (local ledger covers it); it does mean no purchase history and no mint columns on `advice_sale_events` |
 | `NFT_*` on sidecar | No | **Operators usually skip this.** NFT mint to buyers is normally done by the **store** after payment. Only set `NFT_OWNER_PRIVATE_KEY` if you operate contract-owner mint on your own host. |
 
 Fund the CDP account with **USDC on Base mainnet** (~$1 ≈ 80–90 directives). Verify: `npm run cdp:verify` from repo root.
@@ -145,9 +146,11 @@ Handle `402 Payment Required` → pay → retry with your x402 client. You still
 
 Built-in spend guardrails in `@agentic/commerce-agent` (sidecar) use defaults unless you fork the package:
 
-- Daily cap: **$0.10**
+- Daily cap: **$0.10** — settled purchases are recorded in a local ledger (`~/.advice-sky/x402-spend.json`, override with `COMMERCE_SPEND_LEDGER_PATH`), so the cap holds with or without Supabase. When Supabase is configured, the higher of the two daily totals is used. Delete the ledger file and today's count resets, so treat it as a guardrail, not a vault.
 - Per purchase max: **$0.02**
-- User confirmation required above: **$0.05** — at $0.01 you still pass `"confirmed": true` after the user says yes.
+- User confirmation required above: **$0.05** — at $0.01 the code does not require it, but keep passing `"confirmed": true` after the user says yes so the same call still works if pricing changes.
+
+Run one sidecar per wallet. Concurrent sidecars sharing a wallet each keep their own ledger and can exceed the daily cap in aggregate.
 
 ### 2. Execute via sidecar
 

@@ -90,10 +90,18 @@ app.post("/send-payout", auth, async (req, res) => {
 const port = Number(process.env.COMMERCE_SIDECAR_PORT ?? 3847);
 app.listen(port, () => {
   console.log(`commerce-sidecar listening on :${port}`);
-  if (process.env.NFT_CONTRACT_ADDRESS?.trim()) {
+  // Mint needs both vars (see mintSkynetDirectiveAfterBuyAdvice), so only claim it is on
+  // when both are present — otherwise operators read "enabled" for a path that is skipped.
+  const nftContract = process.env.NFT_CONTRACT_ADDRESS?.trim();
+  const nftOwnerKey = process.env.NFT_OWNER_PRIVATE_KEY?.trim();
+  if (nftContract && nftOwnerKey) {
     console.log(
-      "[commerce-sidecar] NFT mint enabled (set NFT_OWNER_PRIVATE_KEY + BASE_RPC_URL to execute mintDirective after /buy-advice)",
+      "[commerce-sidecar] NFT mint enabled — mintDirective runs after /buy-advice",
       nftMintPhase2EnvSummary(),
+    );
+  } else if (nftContract || nftOwnerKey) {
+    console.log(
+      "[commerce-sidecar] NFT mint skipped — needs BOTH NFT_CONTRACT_ADDRESS and NFT_OWNER_PRIVATE_KEY. Advice purchases are unaffected; the store mints to the payer.",
     );
   }
 });
