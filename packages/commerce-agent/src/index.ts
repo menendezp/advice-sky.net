@@ -34,10 +34,24 @@ export {
   payoutPerTransferCapUsd,
   type GuardrailResult,
 } from "./spend-guardrails.js";
-// The daily-spend ledger is deliberately absent from this barrel and from buy-advice.ts:
-// it imports node:fs, and this barrel is pulled into browser chunks by "use client"
-// components in apps/web. Server callers import it from "@agentic/commerce-agent/server"
-// and pass the total to buyAdvice as `spentTodayUsd`.
+// The daily-spend ledger and buyAdviceWithLedger are deliberately absent from this barrel: they
+// import node:fs, and this barrel is pulled into browser chunks by "use client" components in
+// apps/web. Server callers import them from "@agentic/commerce-agent/server".
+export {
+  ADVICE_NETWORK,
+  ADVICE_USDC_ASSET,
+  DEFAULT_ADVICE_ALLOWED_HOSTS,
+  DEFAULT_ADVICE_URL,
+  assertAllowedAdviceUrl,
+  evaluateAdvicePurchase,
+  installAdvicePurchaseGuards,
+  isAllowedAdviceRequirement,
+  usdcAtomicToUsd,
+  type AdvicePaymentRequirement,
+  type AdvicePurchaseContext,
+  type AdvicePurchaseDecision,
+  type AdvicePurchaseGuards,
+} from "./purchase-policy.js";
 export {
   createCommerceSupabase,
   ensureUserIdForWallet,

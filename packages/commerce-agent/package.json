@@ -13,10 +13,10 @@
       "default": "./dist/index.js"
     },
     "./server": {
-      "types": "./dist/daily-spend-ledger.d.ts",
-      "import": "./dist/daily-spend-ledger.js",
-      "require": "./dist/daily-spend-ledger.js",
-      "default": "./dist/daily-spend-ledger.js"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.js",
+      "default": "./dist/server.js"
     }
   },
   "scripts": {

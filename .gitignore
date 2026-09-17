@@ -7,3 +7,8 @@ dist
 !**/.env.example
 *.log
 .DS_Store
+
+# CDP credential downloads — keep these outside the repo entirely
+cdp_api_key*.json
+cdp_wallet_secret*
+*.pem

@@ -1,21 +1,30 @@
-# Deploy: copy into systemd and fix paths/User if yours differ.
-#   sudo cp services/commerce-sidecar/commerce-sidecar.service.example /etc/systemd/system/commerce-sidecar.service
-# Or use the duplicate at: openclaw/deploy/digitalocean-systemd.example.service
+# systemd unit for the commerce sidecar. Same file as deploy/commerce-sidecar.service.example in the
+# public operator kit — see deploy/README.md there.
+#   sudo cp commerce-sidecar.service.example /etc/systemd/system/commerce-sidecar.service
 #
-# Prerequisites (repo root): npm ci && npm run build -w @agentic/commerce-agent
+# Prerequisites (repo root): npm ci && npm run build
 
 [Unit]
-Description=Agentic commerce sidecar (buyAdvice + sendUsdcPayout + optional NFT mint)
-After=network.target
+Description=Advice Sky commerce sidecar (x402 advice purchases)
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=agentic
-WorkingDirectory=/opt/agentic-commerce/services/commerce-sidecar
-EnvironmentFile=-/opt/agentic-commerce/services/commerce-sidecar/.env
+WorkingDirectory=/opt/advice-sky/services/commerce-sidecar
+EnvironmentFile=-/opt/advice-sky/services/commerce-sidecar/.env
+# Loopback only; the daily-spend ledger lives in a state dir systemd creates for this unit.
+Environment=COMMERCE_SIDECAR_HOST=127.0.0.1
+Environment=COMMERCE_SPEND_LEDGER_PATH=/var/lib/commerce-sidecar/x402-spend.json
+StateDirectory=commerce-sidecar
+StateDirectoryMode=0700
 ExecStart=/usr/bin/npm run start
 Restart=on-failure
 RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target

@@ -57,9 +57,12 @@ export async function fetchPaidAdviceX402(
   opts.configureClient?.(client);
   const httpClient = new x402HTTPClient(client);
 
+  // redirect: "error" — a redirect could hand the payment flow (and a signed authorization)
+  // to a host the caller never approved.
   const first = await fetch(adviceUrl, {
     method: "GET",
     headers: { ...X402_FETCH_HEADERS },
+    redirect: "error",
   });
 
   if (first.ok) {
@@ -113,6 +116,7 @@ export async function fetchPaidAdviceX402(
   const second = await fetch(adviceUrl, {
     method: "GET",
     headers: { ...payHeaders, ...X402_FETCH_HEADERS, Accept: "application/json" },
+    redirect: "error",
   });
 
   if (!second.ok) {

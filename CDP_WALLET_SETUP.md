@@ -35,7 +35,7 @@ You do **not** export a private key for normal Server Wallet usage — CDP holds
 ## Part A — CDP project and API key
 
 1. Sign in to the **[CDP Portal](https://portal.cdp.coinbase.com)** (create a Coinbase developer account if needed).
-2. Create or select a **project** for your agent (e.g. “My advice bot”).
+2. Create a **new, dedicated project** for this bot (e.g. “My advice bot”) — don't reuse a project that holds other wallets. API keys are project-scoped, so if this bot's key ever leaks, only this bot's wallet is exposed.
 3. Open **API Keys** (or **Credentials**) and **Create API key**.
 4. When prompted, enable permissions needed for **Server Wallets / EVM** (read + write as offered by the portal).
 5. Save the download or copy:
@@ -60,9 +60,13 @@ If the portal offers a JSON key file, you can use **[CDP CLI](https://docs.cdp.c
 
 ```bash
 npm install -g @coinbase/cdp-cli
-cdp env live --key-file ./cdp_api_key.json
-cdp env live --wallet-secret-file ./cdp_wallet_secret.txt
+mkdir -p ~/cdp-secrets && chmod 700 ~/cdp-secrets   # outside the operator repo
+# move the downloaded cdp_api_key.json and cdp_wallet_secret.txt into ~/cdp-secrets, then:
+cdp env live --key-file ~/cdp-secrets/cdp_api_key.json
+cdp env live --wallet-secret-file ~/cdp-secrets/cdp_wallet_secret.txt
 ```
+
+Never keep these files inside the cloned repo, where a stray `git add` could publish them. Once the values are in the sidecar `.env`, delete the downloads unless your CLI setup still reads them.
 
 **Checkpoint:** You have three strings: API key ID, API key secret, wallet secret.
 
@@ -116,7 +120,7 @@ Each advice purchase costs **$0.01 USDC** on **Base** (not Ethereum mainnet unle
    - From Coinbase (withdraw USDC, network **Base**), or
    - Bridge USDC to Base and transfer to that address, or
    - Another wallet you control (MetaMask on Base network, etc.)
-3. Start small: **$1–2 USDC** is enough for many test purchases (~100 directives per dollar).
+3. Start small: **$1–2 USDC** is enough for many test purchases (~100 directives per dollar). **Never hold more than you'd be fine losing.** The sidecar caps purchases at $0.10/day, but anyone who gets into this machine and reads `.env` can spend the whole balance directly.
 
 **Do not** fund only ETH unless you know you need gas for other flows; x402 USDC payments use **USDC** balance on the CDP account for this integration.
 

@@ -1,31 +1,80 @@
 /**
- * Small HTTP service for OpenClaw (or cron) on the DigitalOcean host.
- * POST /buy-advice — x402 paid GET resource
- * POST /send-payout — USDC transfer to an address you control (guardrails in commerce-agent)
- * Admin: set COMMERCE_SIDECAR_TOKEN and send header x-commerce-token.
+ * Local HTTP service an agent calls to buy Advice Sky directives with the operator's CDP wallet.
+ *
+ * GET  /health      — liveness, unauthenticated
+ * GET  /spend       — today's recorded spend vs the daily cap
+ * POST /buy-advice  — x402 purchase (USDC on Base, allowlisted store only)
+ * POST /send-payout — USDC transfer; disabled unless ENABLE_SEND_PAYOUT=true
+ *
+ * Auth: header `x-commerce-token` must equal COMMERCE_SIDECAR_TOKEN (32+ chars).
+ * Binds 127.0.0.1 unless COMMERCE_SIDECAR_HOST says otherwise.
+ *
+ * NFTs are minted to the payer by the store after settlement, so this service holds no
+ * contract-owner key.
  */
 import "dotenv/config";
+import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
-import { buyAdvice, sendUsdcPayout } from "@agentic/commerce-agent";
 import {
+  DAILY_SPEND_CAP_USD,
+  DEFAULT_ADVICE_URL,
+  sendUsdcPayout,
+} from "@agentic/commerce-agent";
+import {
+  buyAdviceWithLedger,
   readSpentTodayUsdLocal,
-  recordSpendUsdLocal,
 } from "@agentic/commerce-agent/server";
-import { mintSkynetDirectiveAfterBuyAdvice } from "./mint-after-buy-advice.js";
-import { nftMintPhase2EnvSummary } from "./nft-phase2-placeholder.js";
+
+const MIN_TOKEN_LENGTH = 32;
+const RATE_LIMIT_PER_MINUTE = 60;
 
 const app = express();
+app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
 
-const token = process.env.COMMERCE_SIDECAR_TOKEN;
+const token = process.env.COMMERCE_SIDECAR_TOKEN?.trim() ?? "";
+const tokenDigest = createHash("sha256").update(token).digest();
+
+function tokenMatches(presented: string): boolean {
+  // Compare fixed-length digests so neither content nor length leaks through timing.
+  const digest = createHash("sha256").update(presented).digest();
+  return timingSafeEqual(digest, tokenDigest);
+}
+
+/**
+ * Fixed-window limit per client address. Mostly relevant if someone rebinds the service off
+ * loopback; the token is too long to brute-force, but there is no reason to allow unbounded tries.
+ */
+const hits = new Map<string, { windowStart: number; count: number }>();
+function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const now = Date.now();
+  const key = req.ip ?? "unknown";
+  const entry = hits.get(key);
+  if (!entry || now - entry.windowStart >= 60_000) {
+    if (hits.size > 1_000) {
+      for (const [k, v] of hits) if (now - v.windowStart >= 60_000) hits.delete(k);
+    }
+    hits.set(key, { windowStart: now, count: 1 });
+    next();
+    return;
+  }
+  entry.count += 1;
+  if (entry.count > RATE_LIMIT_PER_MINUTE) {
+    res.status(429).json({ error: "rate limited" });
+    return;
+  }
+  next();
+}
 
 function auth(req: express.Request, res: express.Response, next: express.NextFunction) {
-  if (!token) {
-    res.status(503).json({ error: "COMMERCE_SIDECAR_TOKEN not configured" });
+  if (token.length < MIN_TOKEN_LENGTH) {
+    res.status(503).json({
+      error: `COMMERCE_SIDECAR_TOKEN not configured or shorter than ${MIN_TOKEN_LENGTH} characters (use: openssl rand -hex 32)`,
+    });
     return;
   }
   const h = req.headers["x-commerce-token"];
-  if (h !== token) {
+  if (typeof h !== "string" || !tokenMatches(h)) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
@@ -36,38 +85,46 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/buy-advice", auth, async (req, res) => {
-  const { adviceUrl, userId, confirmed } = req.body as {
-    adviceUrl?: string;
-    userId?: string | null;
-    confirmed?: boolean;
+app.get("/spend", rateLimit, auth, (_req, res) => {
+  res.json({ spentTodayUsd: readSpentTodayUsdLocal(), dailyCapUsd: DAILY_SPEND_CAP_USD });
+});
+
+app.post("/buy-advice", rateLimit, auth, async (req, res) => {
+  const body = (req.body ?? {}) as {
+    adviceUrl?: unknown;
+    userId?: unknown;
+    confirmed?: unknown;
   };
-  if (!adviceUrl || typeof adviceUrl !== "string") {
-    res.status(400).json({ error: "adviceUrl required" });
+  const adviceUrl = body.adviceUrl ?? DEFAULT_ADVICE_URL;
+  if (typeof adviceUrl !== "string") {
+    res.status(400).json({ error: "adviceUrl must be a string" });
+    return;
+  }
+  if (body.userId != null && typeof body.userId !== "string") {
+    res.status(400).json({ error: "userId must be a string" });
     return;
   }
   try {
-    // The ledger is what makes DAILY_SPEND_CAP_USD hold without Supabase.
-    const result = await buyAdvice({
+    // Serialized, allowlisted, and spend recorded before signing — see buyAdviceWithLedger.
+    const result = await buyAdviceWithLedger({
       adviceUrl,
-      userId: userId ?? null,
-      confirmed,
-      spentTodayUsd: readSpentTodayUsdLocal(),
+      userId: (body.userId as string | undefined) ?? null,
+      confirmed: body.confirmed === true,
     });
-    recordSpendUsdLocal(result.paidUsd);
-    const nftMint = await mintSkynetDirectiveAfterBuyAdvice({
-      advice: result.advice,
-      payer: result.payer,
-      settlementTx: result.settlementTx,
-    });
-    res.json({ ...result, nftMint });
+    res.json(result);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     res.status(500).json({ error: msg });
   }
 });
 
-app.post("/send-payout", auth, async (req, res) => {
+app.post("/send-payout", rateLimit, auth, async (req, res) => {
+  if (process.env.ENABLE_SEND_PAYOUT !== "true") {
+    res.status(403).json({
+      error: "send-payout is disabled; set ENABLE_SEND_PAYOUT=true in the sidecar .env to enable it",
+    });
+    return;
+  }
   const { to, amountUsd, userId, confirmed, memo } = req.body as {
     to?: string;
     amountUsd?: number;
@@ -88,7 +145,7 @@ app.post("/send-payout", auth, async (req, res) => {
       to,
       amountUsd,
       userId: userId ?? null,
-      confirmed: Boolean(confirmed),
+      confirmed: confirmed === true,
       memo: memo ?? null,
     });
     res.json(result);
@@ -99,20 +156,22 @@ app.post("/send-payout", auth, async (req, res) => {
 });
 
 const port = Number(process.env.COMMERCE_SIDECAR_PORT ?? 3847);
-app.listen(port, () => {
-  console.log(`commerce-sidecar listening on :${port}`);
-  // Mint needs both vars (see mintSkynetDirectiveAfterBuyAdvice), so only claim it is on
-  // when both are present — otherwise operators read "enabled" for a path that is skipped.
-  const nftContract = process.env.NFT_CONTRACT_ADDRESS?.trim();
-  const nftOwnerKey = process.env.NFT_OWNER_PRIVATE_KEY?.trim();
-  if (nftContract && nftOwnerKey) {
-    console.log(
-      "[commerce-sidecar] NFT mint enabled — mintDirective runs after /buy-advice",
-      nftMintPhase2EnvSummary(),
+const host = process.env.COMMERCE_SIDECAR_HOST?.trim() || "127.0.0.1";
+app.listen(port, host, () => {
+  console.log(`commerce-sidecar listening on ${host}:${port}`);
+  if (host !== "127.0.0.1" && host !== "::1" && host !== "localhost") {
+    console.warn(
+      `[commerce-sidecar] bound to ${host}, not loopback — anyone who can reach this port and guess or steal the token can spend from the wallet. Only do this behind TLS and a firewall.`,
     );
-  } else if (nftContract || nftOwnerKey) {
-    console.log(
-      "[commerce-sidecar] NFT mint skipped — needs BOTH NFT_CONTRACT_ADDRESS and NFT_OWNER_PRIVATE_KEY. Advice purchases are unaffected; the store mints to the payer.",
+  }
+  if (token.length < MIN_TOKEN_LENGTH) {
+    console.warn(
+      `[commerce-sidecar] COMMERCE_SIDECAR_TOKEN missing or shorter than ${MIN_TOKEN_LENGTH} characters; authenticated routes return 503.`,
+    );
+  }
+  if (process.env.NFT_OWNER_PRIVATE_KEY?.trim()) {
+    console.warn(
+      "[commerce-sidecar] NFT_OWNER_PRIVATE_KEY is set but no longer used — the store mints to the payer. Remove it from this host's .env.",
     );
   }
 });

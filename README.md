@@ -21,20 +21,17 @@ cd advice-sky.net
 npm ci
 npm run build
 cp services/commerce-sidecar/.env.example services/commerce-sidecar/.env
-# edit .env — CDP keys + COMMERCE_SIDECAR_TOKEN
+chmod 600 services/commerce-sidecar/.env
+# edit .env — CDP keys + COMMERCE_SIDECAR_TOKEN (openssl rand -hex 32)
 npm run sidecar
 ```
 
 See [SKILL.md](./SKILL.md) and [deploy/README.md](./deploy/README.md).
 
+## Security
+
+The sidecar only pays USDC on Base to `store.advice-sky.net`, caps spend at $0.02 per purchase and $0.10/day, listens on `127.0.0.1` only, and keeps payouts disabled. It can't protect a wallet on a compromised machine, so **fund the bot wallet with a few dollars at most**. Details: [SKILL.md — Security model](./SKILL.md#security-model--what-these-limits-dont-cover).
+
 ## Maintainers (Advice Sky)
 
-Canonical copy in the private monorepo: `advice-sky.net-public/`. After changing `packages/commerce-agent` or `services/commerce-sidecar` in agentic-commerce, sync into this tree and push `advice-sky.net`.
-
-```bash
-# from agentic-commerce repo root
-rsync -a --delete --exclude node_modules --exclude dist \
-  packages/commerce-agent/ advice-sky.net-public/packages/commerce-agent/
-rsync -a --delete --exclude node_modules --exclude .env \
-  services/commerce-sidecar/ advice-sky.net-public/services/commerce-sidecar/
-```
+`packages/commerce-agent` and `services/commerce-sidecar` are generated from the private agentic-commerce monorepo — edit them there, not here. Publish with `scripts/sync-advice-sky-public.sh` in that repo, which writes into this clone. Docs (`*.md`, `deploy/`, `openclaw/`) live only here.

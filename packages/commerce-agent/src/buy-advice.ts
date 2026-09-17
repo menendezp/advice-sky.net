@@ -1,10 +1,11 @@
 import { CdpClient } from "@coinbase/cdp-sdk";
 import { cdpAccountToX402Signer } from "./cdp-signer.js";
 import {
-  assertDailyCap,
-  assertPerItemCap,
-  needsConfirmation,
-} from "./spend-guardrails.js";
+  DEFAULT_ADVICE_ALLOWED_HOSTS,
+  assertAllowedAdviceUrl,
+  installAdvicePurchaseGuards,
+  type AdvicePaymentRequirement,
+} from "./purchase-policy.js";
 import {
   createCommerceSupabase,
   ensureUserIdForWallet,
@@ -15,32 +16,35 @@ import { extractDirectiveTokenIdFromAdvice } from "./advice-directive.js";
 import { fetchPaidAdviceX402 } from "./x402-paid-fetch.js";
 
 export type BuyAdviceOptions = {
-  /** Full URL to GET /api/advice (paid resource). */
+  /** Full https URL to GET /api/advice (paid resource). Host must be allowlisted. */
   adviceUrl: string;
   /**
    * Optional `public.users.id`. When omitted and Supabase is configured, a row is
    * created or reused by the payer EVM address (`evm_wallet`) so logs stay keyed per wallet.
    */
   userId?: string | null;
-  /** Set true when the human approved a spend above the confirmation threshold. */
+  /** True only when a human approved this specific purchase. Anything but `true` is false. */
   confirmed?: boolean;
   /**
-   * USD already spent today by this wallet, counted toward `DAILY_SPEND_CAP_USD`.
-   * The sidecar passes its local ledger total (see `@agentic/commerce-agent/server`);
-   * when Supabase is configured the higher of the two is used. Callers that pass
-   * nothing and run without Supabase get per-item and confirmation caps only.
+   * USD already spent today by this wallet, counted toward `DAILY_SPEND_CAP_USD`. Required so
+   * no caller skips the daily cap by accident; when Supabase is configured the higher of this
+   * and the Supabase total is used. Node callers should use `buyAdviceWithLedger` from
+   * `@agentic/commerce-agent/server`, which supplies it and records spend.
    */
-  spentTodayUsd?: number;
+  spentTodayUsd: number;
+  /**
+   * Called after every guardrail passes and before the payment is signed. Once signed, the
+   * authorization can be settled even if the paid request later fails, so spend trackers
+   * should record here rather than after the response.
+   */
+  onPaymentAuthorized?: (usd: number) => void | Promise<void>;
 };
 
 export type BuyAdviceResult = {
   advice: unknown;
   settlementTx: string;
   payer?: string;
-  /**
-   * USD authorized for this purchase, or 0 when settlement failed. Callers that track
-   * daily spend themselves add this to their running total.
-   */
+  /** USD authorized for this purchase, or 0 when settlement reported failure. */
   paidUsd: number;
   /** True when `tx_logs` and `content` rows were inserted (Supabase env configured). */
   loggedToSupabase: boolean;
@@ -50,17 +54,24 @@ export type BuyAdviceResult = {
   loggedAdviceSale: boolean;
 };
 
-function usdcAtomicToUsd(amountAtomic: string): number {
-  return Number(BigInt(amountAtomic)) / 1e6;
+/** `ADVICE_ALLOWED_HOSTS` (comma-separated) overrides the default store host, e.g. for a staging store. */
+function allowedAdviceHosts(): readonly string[] {
+  const raw = process.env.ADVICE_ALLOWED_HOSTS?.trim();
+  if (!raw) return DEFAULT_ADVICE_ALLOWED_HOSTS;
+  return raw.split(",").map((h) => h.trim()).filter(Boolean);
 }
 
 export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult> {
-  const {
-    adviceUrl,
-    userId = null,
-    confirmed = false,
-    spentTodayUsd = 0,
-  } = opts;
+  const { adviceUrl, userId = null, spentTodayUsd, onPaymentAuthorized } = opts;
+  const confirmed = opts.confirmed === true;
+
+  if (!Number.isFinite(spentTodayUsd) || spentTodayUsd < 0) {
+    throw new Error("spentTodayUsd must be a non-negative number");
+  }
+  const urlCheck = assertAllowedAdviceUrl(adviceUrl, allowedAdviceHosts());
+  if (!urlCheck.ok) {
+    throw new Error(urlCheck.reason);
+  }
 
   const cdp = new CdpClient();
   const name = process.env.CDP_AGENT_ACCOUNT_NAME;
@@ -79,46 +90,32 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   const rpcUrl = process.env.BASE_RPC_URL;
   const evmSigner = cdpAccountToX402Signer(account);
 
-  /** USD authorized by the guardrail hook, recorded in the local ledger once settled. */
+  /** USD approved by the guardrail hook for the requirement the client selected. */
   let authorizedUsd = 0;
+  let selected: (AdvicePaymentRequirement & { payTo?: string }) | null = null;
 
   const paid = await fetchPaidAdviceX402({
     adviceUrl,
     signer: evmSigner,
     rpcUrl,
-    configureClient: (core) => {
-      core.onBeforePaymentCreation(async ({ paymentRequired }) => {
-        const first = paymentRequired.accepts[0];
-        if (!first) return { abort: true, reason: "No payment options in 402" };
-
-        const usd = usdcAtomicToUsd(first.amount);
-        const per = assertPerItemCap(usd);
-        if (!per.ok) return { abort: true, reason: per.reason };
-
-        if (needsConfirmation(usd) && !confirmed) {
-          return {
-            abort: true,
-            reason:
-              "Spend exceeds confirmation threshold; set confirmed=true after user approves in WhatsApp/Telegram",
-          };
-        }
-
-        // Caller-tracked spend (sidecar ledger) keeps the daily cap real without
-        // Supabase; when Supabase is configured the higher of the two totals wins.
-        let spent = spentTodayUsd;
-        if (sbForBuyer && buyerUserId) {
-          const remote = await sumSpentTodayUsd(sbForBuyer, buyerUserId, {
-            entryTypes: ["x402"],
-          });
-          spent = Math.max(spent, remote);
-        }
-        const daily = assertDailyCap(spent, usd);
-        if (!daily.ok) return { abort: true, reason: daily.reason };
-
-        authorizedUsd = usd;
-        return;
-      });
-    },
+    configureClient: (core) =>
+      installAdvicePurchaseGuards(core, {
+        resolveContext: async () => {
+          let spent = spentTodayUsd;
+          if (sbForBuyer && buyerUserId) {
+            const remote = await sumSpentTodayUsd(sbForBuyer, buyerUserId, {
+              entryTypes: ["x402"],
+            });
+            spent = Math.max(spent, remote);
+          }
+          return { confirmed, spentTodayUsd: spent };
+        },
+        onAuthorized: async (usd, requirement) => {
+          await onPaymentAuthorized?.(usd);
+          authorizedUsd = usd;
+          selected = requirement;
+        },
+      }),
   });
 
   const { advice, settlement } = paid;
@@ -128,12 +125,9 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   const sb = createCommerceSupabase();
   let loggedToSupabase = false;
   let loggedAdviceSale = false;
-  if (sb && paymentRequired !== undefined && body !== undefined) {
-    const pr = paymentRequired as { accepts?: Array<{ payTo?: string; network?: string; amount?: string }> };
-    const firstReq = pr.accepts?.[0];
-    const payTo = firstReq?.payTo?.trim()
-      ? firstReq.payTo.trim().toLowerCase()
-      : null;
+  const req = selected as (AdvicePaymentRequirement & { payTo?: string }) | null;
+  if (sb && req && paymentRequired !== undefined && body !== undefined) {
+    const payTo = req.payTo?.trim() ? req.payTo.trim().toLowerCase() : null;
     // USDC sender: the wallet that pays the merchant (CDP account; settlement.payer should match).
     const payFrom =
       payerWallet ?? normalizeEvmWallet(settlement.payer) ?? null;
@@ -141,8 +135,8 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
     await sb.from("tx_logs").insert({
       user_id: buyerUserId,
       entry_type: "x402",
-      chain: firstReq?.network ?? "unknown",
-      amount: usdcAtomicToUsd(firstReq?.amount ?? "0"),
+      chain: req.network ?? "unknown",
+      amount: authorizedUsd,
       currency: "USDC",
       merchant_ref: adviceUrl,
       pay_from: payFrom,
