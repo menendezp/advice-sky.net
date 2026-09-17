@@ -81,6 +81,21 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   next();
 }
 
+/** Supabase `users.id` is a UUID; anything else fails only after payment, so reject it up front. */
+function isUuid(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+
+/** Readable message for any thrown value (CDP and x402 sometimes throw plain objects). */
+function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
@@ -100,8 +115,8 @@ app.post("/buy-advice", rateLimit, auth, async (req, res) => {
     res.status(400).json({ error: "adviceUrl must be a string" });
     return;
   }
-  if (body.userId != null && typeof body.userId !== "string") {
-    res.status(400).json({ error: "userId must be a string" });
+  if (body.userId != null && (typeof body.userId !== "string" || !isUuid(body.userId))) {
+    res.status(400).json({ error: "userId must be a UUID or omitted" });
     return;
   }
   try {
@@ -111,10 +126,14 @@ app.post("/buy-advice", rateLimit, auth, async (req, res) => {
       userId: (body.userId as string | undefined) ?? null,
       confirmed: body.confirmed === true,
     });
-    res.json(result);
+    // The store's `nft` field is an internal minting hint; the store mints to the payer itself.
+    const advice =
+      result.advice && typeof result.advice === "object"
+        ? (({ nft: _nft, ...rest }) => rest)(result.advice as Record<string, unknown>)
+        : result.advice;
+    res.json({ ...result, advice });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: errorMessage(e) });
   }
 });
 
@@ -150,8 +169,7 @@ app.post("/send-payout", rateLimit, auth, async (req, res) => {
     });
     res.json(result);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(500).json({ error: msg });
+    res.status(500).json({ error: errorMessage(e) });
   }
 });
 
