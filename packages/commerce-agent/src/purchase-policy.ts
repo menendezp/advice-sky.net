@@ -51,11 +51,19 @@ export type AdvicePurchaseContext = {
   confirmed: boolean;
   /** USD already spent today, counted toward the daily cap. */
   spentTodayUsd: number;
+  /**
+   * False when the seller is not on the operator's trusted list: every purchase then needs
+   * `confirmed`, whatever the price. Omitted means trusted (callers that pin a host themselves).
+   */
+  trustedHost?: boolean;
 };
 
 export type AdvicePurchaseDecision =
   | { ok: true; usd: number }
   | { ok: false; reason: string };
+
+export const UNTRUSTED_NEEDS_CONFIRMATION =
+  "not a trusted site: ask the human before every purchase here, then retry with confirmed=true";
 
 /** Decide whether the requirement the x402 client selected may be signed. */
 export function evaluateAdvicePurchase(
@@ -70,7 +78,9 @@ export function evaluateAdvicePurchase(
   }
   const usd = usdcAtomicToUsd(req.amount as string);
   const checks: GuardrailResult[] = [assertPerItemCap(usd)];
-  if (needsConfirmation(usd) && ctx.confirmed !== true) {
+  if (ctx.trustedHost === false && ctx.confirmed !== true) {
+    checks.push({ ok: false, reason: UNTRUSTED_NEEDS_CONFIRMATION });
+  } else if (needsConfirmation(usd) && ctx.confirmed !== true) {
     checks.push({
       ok: false,
       reason: `$${usd} exceeds the confirmation threshold; ask the human, then retry with confirmed=true`,
@@ -81,6 +91,37 @@ export function evaluateAdvicePurchase(
     if (!c.ok) return { ok: false, reason: c.reason };
   }
   return { ok: true, usd };
+}
+
+export type AdviceUrlCheck =
+  | { ok: true; host: string; trusted: boolean }
+  | { ok: false; reason: string };
+
+/**
+ * Any https URL may be bought from; `trusted` says whether its host is on the operator's list.
+ * Untrusted hosts need human confirmation per purchase and a public-address check before the
+ * sidecar fetches them (see host-safety.ts), so a prompt-injected agent can't point the
+ * sidecar at localhost or the local network.
+ */
+export function classifyAdviceUrl(
+  adviceUrl: string,
+  trustedHosts: readonly string[] = DEFAULT_ADVICE_ALLOWED_HOSTS,
+): AdviceUrlCheck {
+  let parsed: URL;
+  try {
+    parsed = new URL(adviceUrl);
+  } catch {
+    return { ok: false, reason: "adviceUrl is not a valid URL" };
+  }
+  if (parsed.protocol !== "https:") {
+    return { ok: false, reason: "adviceUrl must use https" };
+  }
+  if (parsed.username || parsed.password) {
+    return { ok: false, reason: "adviceUrl must not contain credentials" };
+  }
+  const host = parsed.hostname.toLowerCase();
+  const trusted = trustedHosts.map((h) => h.trim().toLowerCase()).includes(host);
+  return { ok: true, host, trusted };
 }
 
 /**

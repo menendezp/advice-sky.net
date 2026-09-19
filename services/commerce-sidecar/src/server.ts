@@ -2,8 +2,11 @@
  * Local HTTP service an agent calls to buy Advice Sky directives with the operator's CDP wallet.
  *
  * GET  /health      — liveness, unauthenticated
- * GET  /spend       — today's recorded spend vs the daily cap
- * POST /buy-advice  — x402 purchase (USDC on Base, allowlisted store only)
+ * GET  /spend         — today's recorded spend vs the daily cap
+ * GET  /trusted-hosts — sellers bought from without per-purchase confirmation
+ * POST /buy-advice    — x402 purchase (USDC on Base). Trusted sellers buy within the caps; any
+ *                       other https seller needs confirmed=true every time and must resolve to
+ *                       a public address.
  * POST /send-payout — USDC transfer; disabled unless ENABLE_SEND_PAYOUT=true
  *
  * Auth: header `x-commerce-token` must equal COMMERCE_SIDECAR_TOKEN (32+ chars).
@@ -23,6 +26,8 @@ import {
 import {
   buyAdviceWithLedger,
   readSpentTodayUsdLocal,
+  trustedAdviceHosts,
+  trustedHostsPath,
 } from "@agentic/commerce-agent/server";
 
 const MIN_TOKEN_LENGTH = 32;
@@ -102,6 +107,11 @@ app.get("/health", (_req, res) => {
 
 app.get("/spend", rateLimit, auth, (_req, res) => {
   res.json({ spentTodayUsd: readSpentTodayUsdLocal(), dailyCapUsd: DAILY_SPEND_CAP_USD });
+});
+
+// Read-only on purpose: changing the list is done by editing the file, never through this API.
+app.get("/trusted-hosts", rateLimit, auth, (_req, res) => {
+  res.json({ hosts: trustedAdviceHosts(), file: trustedHostsPath() });
 });
 
 app.post("/buy-advice", rateLimit, auth, async (req, res) => {

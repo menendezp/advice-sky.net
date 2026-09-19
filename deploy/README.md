@@ -111,6 +111,14 @@ Point `skills.extraDirs` at `openclaw/skills` in this repo:
 
 Restrict purchases to your admin IDs per `commerce-advice`.
 
+**Trusted sites:** the sidecar reads `~/.advice-sky/trusted-hosts.json` of the user it runs as (`agentic` in the unit above), on every purchase. To trust another seller:
+
+```bash
+sudo -u agentic sh -c 'mkdir -p ~/.advice-sky && echo "{\"hosts\": [\"x402lifeadvice.vercel.app\"]}" > ~/.advice-sky/trusted-hosts.json'
+```
+
+Or set `ADVICE_TRUSTED_HOSTS_PATH` in `.env` to put it elsewhere. `GET /trusted-hosts` shows what the sidecar sees.
+
 Docs: [SETUP_GUIDE_FOR_AGENTS.md](../SETUP_GUIDE_FOR_AGENTS.md), [SKILL.md](../SKILL.md).
 
 ---

@@ -2,10 +2,12 @@ import { CdpClient } from "@coinbase/cdp-sdk";
 import { cdpAccountToX402Signer } from "./cdp-signer.js";
 import {
   DEFAULT_ADVICE_ALLOWED_HOSTS,
-  assertAllowedAdviceUrl,
+  UNTRUSTED_NEEDS_CONFIRMATION,
+  classifyAdviceUrl,
   installAdvicePurchaseGuards,
   type AdvicePaymentRequirement,
 } from "./purchase-policy.js";
+import type { GuardrailResult } from "./spend-guardrails.js";
 import {
   createCommerceSupabase,
   ensureUserIdForWallet,
@@ -16,8 +18,18 @@ import { extractDirectiveTokenIdFromAdvice } from "./advice-directive.js";
 import { fetchPaidAdviceX402 } from "./x402-paid-fetch.js";
 
 export type BuyAdviceOptions = {
-  /** Full https URL to GET /api/advice (paid resource). Host must be allowlisted. */
+  /**
+   * Full https URL of the paid resource. Trusted hosts buy within the caps; any other host
+   * needs `confirmed` for every purchase and a `checkHost` that rejects non-public addresses.
+   */
   adviceUrl: string;
+  /** Trusted hosts. Defaults to `ADVICE_ALLOWED_HOSTS`, or the public store when unset. */
+  trustedHosts?: readonly string[];
+  /**
+   * Refuses hosts that resolve to local or private addresses. Required for untrusted hosts;
+   * `buyAdviceWithLedger` supplies `assertPublicHost`.
+   */
+  checkHost?: (host: string) => Promise<GuardrailResult>;
   /**
    * Optional `public.users.id`. When omitted and Supabase is configured, a row is
    * created or reused by the payer EVM address (`evm_wallet`) so logs stay keyed per wallet.
@@ -61,6 +73,30 @@ function allowedAdviceHosts(): readonly string[] {
   return raw.split(",").map((h) => h.trim()).filter(Boolean);
 }
 
+/**
+ * Decide, before any network call to the seller, whether this URL may be bought from.
+ * Returns whether the host is trusted; throws with a reason the agent can relay otherwise.
+ */
+export async function checkAdvicePurchaseTarget(
+  opts: Pick<BuyAdviceOptions, "adviceUrl" | "trustedHosts" | "checkHost" | "confirmed">,
+): Promise<{ host: string; trusted: boolean }> {
+  const url = classifyAdviceUrl(opts.adviceUrl, opts.trustedHosts ?? allowedAdviceHosts());
+  if (!url.ok) throw new Error(url.reason);
+  if (!url.trusted) {
+    if (!opts.checkHost) {
+      throw new Error(
+        `${url.host} is not a trusted site, and buying from untrusted sites needs a public-address check (use buyAdviceWithLedger)`,
+      );
+    }
+    if (opts.confirmed !== true) throw new Error(`${url.host} is ${UNTRUSTED_NEEDS_CONFIRMATION}`);
+  }
+  if (opts.checkHost) {
+    const safe = await opts.checkHost(url.host);
+    if (!safe.ok) throw new Error(safe.reason);
+  }
+  return { host: url.host, trusted: url.trusted };
+}
+
 export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult> {
   const { adviceUrl, userId = null, spentTodayUsd, onPaymentAuthorized } = opts;
   const confirmed = opts.confirmed === true;
@@ -68,10 +104,7 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
   if (!Number.isFinite(spentTodayUsd) || spentTodayUsd < 0) {
     throw new Error("spentTodayUsd must be a non-negative number");
   }
-  const urlCheck = assertAllowedAdviceUrl(adviceUrl, allowedAdviceHosts());
-  if (!urlCheck.ok) {
-    throw new Error(urlCheck.reason);
-  }
+  const { trusted } = await checkAdvicePurchaseTarget({ ...opts, confirmed });
 
   const cdp = new CdpClient();
   const name = process.env.CDP_AGENT_ACCOUNT_NAME;
@@ -108,7 +141,7 @@ export async function buyAdvice(opts: BuyAdviceOptions): Promise<BuyAdviceResult
             });
             spent = Math.max(spent, remote);
           }
-          return { confirmed, spentTodayUsd: spent };
+          return { confirmed, spentTodayUsd: spent, trustedHost: trusted };
         },
         onAuthorized: async (usd, requirement) => {
           await onPaymentAuthorized?.(usd);

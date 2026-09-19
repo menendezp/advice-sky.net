@@ -9,7 +9,11 @@ import {
   readSpentTodayUsdLocal,
   recordSpendUsdLocal,
 } from "./daily-spend-ledger.js";
+import { assertPublicHost } from "./host-safety.js";
+import { trustedAdviceHosts } from "./trusted-hosts.js";
 
+export { assertPublicHost, isNonPublicAddress } from "./host-safety.js";
+export { readTrustedHostsFile, trustedAdviceHosts, trustedHostsPath } from "./trusted-hosts.js";
 export {
   readSpentTodayUsdLocal,
   recordSpendUsdLocal,
@@ -31,13 +35,15 @@ export function serializePurchase<T>(task: () => Promise<T>): Promise<T> {
 
 export type BuyAdviceWithLedgerOptions = Omit<
   BuyAdviceOptions,
-  "spentTodayUsd" | "onPaymentAuthorized"
+  "spentTodayUsd" | "onPaymentAuthorized" | "trustedHosts" | "checkHost"
 >;
 
 /**
  * `buyAdvice` with the daily cap enforced by the local ledger: purchases run one at a time, the
  * running total is read inside the queue, and spend is recorded before the payment is signed.
- * Use this from any Node process that spends from a wallet.
+ * Trusted hosts come from `ADVICE_ALLOWED_HOSTS` plus the trusted-hosts file, re-read on every
+ * purchase; every seller must resolve to a public address. Use this from any Node process that
+ * spends from a wallet.
  */
 export function buyAdviceWithLedger(
   opts: BuyAdviceWithLedgerOptions,
@@ -46,6 +52,8 @@ export function buyAdviceWithLedger(
     buyAdvice({
       ...opts,
       spentTodayUsd: readSpentTodayUsdLocal(),
+      trustedHosts: trustedAdviceHosts(),
+      checkHost: assertPublicHost,
       onPaymentAuthorized: (usd) => recordSpendUsdLocal(usd),
     }),
   );

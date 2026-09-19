@@ -7,6 +7,7 @@ import {
   ADVICE_NETWORK,
   ADVICE_USDC_ASSET,
   assertAllowedAdviceUrl,
+  classifyAdviceUrl,
   evaluateAdvicePurchase,
   installAdvicePurchaseGuards,
   isAllowedAdviceRequirement,
@@ -62,6 +63,19 @@ describe("evaluateAdvicePurchase", () => {
   it("enforces the daily cap", () => {
     expect(evaluateAdvicePurchase(usdcBase("10000"), { ...ctx, spentTodayUsd: 0.1 }).ok).toBe(false);
   });
+  it("asks for confirmation on every purchase from an untrusted site, even $0.001", () => {
+    const untrusted = { ...ctx, trustedHost: false };
+    expect(evaluateAdvicePurchase(usdcBase("1000"), untrusted).ok).toBe(false);
+    expect(evaluateAdvicePurchase(usdcBase("1000"), { ...untrusted, confirmed: true })).toEqual({
+      ok: true,
+      usd: 0.001,
+    });
+  });
+  it("keeps the caps for untrusted sites when confirmed", () => {
+    const untrusted = { ...ctx, trustedHost: false, confirmed: true };
+    expect(evaluateAdvicePurchase(usdcBase("50000"), untrusted).ok).toBe(false);
+    expect(evaluateAdvicePurchase(usdcBase("10000"), { ...untrusted, spentTodayUsd: 0.1 }).ok).toBe(false);
+  });
   it("refuses non-USDC-on-Base requirements outright", () => {
     const r = evaluateAdvicePurchase({ ...usdcBase("10000"), network: "eip155:1" }, ctx);
     expect(r.ok).toBe(false);
@@ -84,6 +98,35 @@ describe("assertAllowedAdviceUrl", () => {
   });
   it("honours an explicit allowlist", () => {
     expect(assertAllowedAdviceUrl("https://staging.example/api/advice", ["staging.example"]).ok).toBe(true);
+  });
+});
+
+describe("classifyAdviceUrl", () => {
+  it("marks the public store trusted and other https sites untrusted", () => {
+    expect(classifyAdviceUrl("https://store.advice-sky.net/api/advice")).toEqual({
+      ok: true,
+      host: "store.advice-sky.net",
+      trusted: true,
+    });
+    expect(classifyAdviceUrl("https://x402lifeadvice.vercel.app/api/life-advice")).toEqual({
+      ok: true,
+      host: "x402lifeadvice.vercel.app",
+      trusted: false,
+    });
+  });
+  it("does not let a lookalike host inherit trust", () => {
+    const r = classifyAdviceUrl("https://store.advice-sky.net.evil.example/api/advice");
+    expect(r.ok && r.trusted).toBe(false);
+  });
+  it.each(["http://store.advice-sky.net/api/advice", "https://user:pw@evil.example/", "not a url"])(
+    "rejects %s",
+    (url) => {
+      expect(classifyAdviceUrl(url).ok).toBe(false);
+    },
+  );
+  it("matches trusted hosts case-insensitively", () => {
+    const r = classifyAdviceUrl("https://Other.Example/x", [" other.example "]);
+    expect(r.ok && r.trusted).toBe(true);
   });
 });
 

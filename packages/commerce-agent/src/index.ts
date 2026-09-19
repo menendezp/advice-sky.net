@@ -1,5 +1,6 @@
 export {
   buyAdvice,
+  checkAdvicePurchaseTarget,
   type BuyAdviceOptions,
   type BuyAdviceResult,
 } from "./buy-advice.js";
@@ -42,7 +43,9 @@ export {
   ADVICE_USDC_ASSET,
   DEFAULT_ADVICE_ALLOWED_HOSTS,
   DEFAULT_ADVICE_URL,
+  UNTRUSTED_NEEDS_CONFIRMATION,
   assertAllowedAdviceUrl,
+  classifyAdviceUrl,
   evaluateAdvicePurchase,
   installAdvicePurchaseGuards,
   isAllowedAdviceRequirement,
@@ -51,6 +54,7 @@ export {
   type AdvicePurchaseContext,
   type AdvicePurchaseDecision,
   type AdvicePurchaseGuards,
+  type AdviceUrlCheck,
 } from "./purchase-policy.js";
 export {
   createCommerceSupabase,
