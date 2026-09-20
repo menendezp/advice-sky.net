@@ -1,7 +1,7 @@
 ---
 name: skynet-advice
 description: Buy classified AI advice from Advice Sky.net — x402-gated directives paid in USDC on Base, with an NFT minted to the payer by the store. Works with any agent framework that can make local HTTP calls, backed by a CDP Server Wallet.
-version: 1.4.0
+version: 1.4.1
 author: Advice Sky.net
 website: https://advice-sky.net
 store_url: https://store.advice-sky.net/api/advice
@@ -84,6 +84,7 @@ Edit `services/commerce-sidecar/.env`:
 | `COMMERCE_SIDECAR_HOST` | No | Default `127.0.0.1`. Don't change it unless the port sits behind TLS and a firewall — the token would be all that protects your wallet. |
 | `COMMERCE_SPEND_LEDGER_PATH` | No | Where daily spend is recorded. Default `~/.advice-sky/x402-spend.json` |
 | `ADVICE_TRUSTED_HOSTS_PATH` | No | Trusted-sites file. Default `~/.advice-sky/trusted-hosts.json` (see [Buying from other sites](#buying-from-other-sites)) |
+| `ADVICE_ALLOW_CIDRS` | No | IP ranges to accept for untrusted sites, e.g. `198.18.0.0/15` on a VM whose DNS points every hostname at an egress proxy |
 | `ADVICE_ALLOWED_HOSTS` | No | Replaces the default trusted store (`store.advice-sky.net`), e.g. to test your own store |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | No | Optional purchase history. Not needed for the daily cap. |
 | `ENABLE_SEND_PAYOUT` | No | Off by default. `true` enables `POST /send-payout`, which can transfer up to $50 per call. Buyers don't need it. |
@@ -119,9 +120,13 @@ Expected log: `commerce-sidecar listening on 127.0.0.1:3847`. Production: [deplo
 ```bash
 curl -s http://127.0.0.1:3847/health
 curl -sS -K ~/.advice-sky/sidecar-curl.conf http://127.0.0.1:3847/spend
+curl -sS -K ~/.advice-sky/sidecar-curl.conf -X POST http://127.0.0.1:3847/preflight \
+  -H "Content-Type: application/json" -d '{}'
 ```
 
 `/spend` returns `{"spentTodayUsd":0,"dailyCapUsd":0.1}` and proves the token works without spending anything.
+
+`/preflight` is the one that proves buying works: it runs every check and fetches the store's 402 **without paying**. Expect `"wouldBuy": true` with `"payable": {"usd": 0.01, …}`. Anything else (`not a public seller hostname`, `local or private address`, `could not resolve`) tells you what a real purchase would hit — see [When the network lies](#when-the-network-lies).
 
 - `401 unauthorized` → token in the curl config ≠ token in `.env`
 - `503 … not configured or shorter than 32 characters` → token missing or too short in `.env`
@@ -192,7 +197,7 @@ Share:
 | `Daily cap $0.1 would be exceeded` | The $0.10/day limit is reached; try again tomorrow (UTC) |
 | `confirmation threshold` | The price is higher than usual; ask the human before retrying with `"confirmed": true` |
 | `not a trusted site` | Another site needs the human's yes every time. Ask, then retry with `"confirmed": true`. |
-| `local or private address` / `must use https` | The sidecar refused that URL. Don't retry with another URL; tell your human. |
+| `local or private address` / `not a public seller hostname` / `must use https` | The sidecar refused that URL. Don't retry with another URL; tell your human — on a sandboxed VM it may need `ADVICE_ALLOW_CIDRS` (see [When the network lies](#when-the-network-lies)). |
 | `Refusing payment`, `filtered out`, or `rejected by spendControls` | The store asked for something the sidecar won't pay (not USDC on Base, or too expensive); nothing was paid. Tell your human. |
 | Insufficient funds | Fund the CDP wallet with USDC on Base |
 | Connection refused | Sidecar not running: `cd services/commerce-sidecar && npm run start` |
@@ -222,6 +227,22 @@ curl -sS -K ~/.advice-sky/sidecar-curl.conf \
 Only the host goes in the list: no `https://`, no path. `GET /trusted-hosts` shows the current list. Other sites return their own JSON (no Advice Sky title/directive, no NFT), and the sale poll above only works for the Advice Sky store.
 
 A trusted site can spend up to the caps without asking: $0.02 per purchase and $0.10 a day. Trust sites you'd be fine losing that to.
+
+---
+
+## When the network lies
+
+For sites the operator hasn't trusted, the sidecar resolves the hostname and refuses local or private addresses, so a manipulated agent can't point it at localhost or your router. That check believes the system resolver.
+
+Some sandboxes and agent VMs answer **every** hostname with an address from their own egress proxy (often `198.18.x.x`). There, nothing is what DNS says it is. The sidecar handles that in three ways:
+
+- **Trusted sites skip the address check.** You chose them, not the agent, so buying keeps working wherever the sidecar runs. Hostname rules still apply: no IP literals, no `localhost`, no single-label or `*.internal`/`*.local` names.
+- **A proxy switches the check off, loudly.** If `HTTPS_PROXY`/`HTTP_PROXY` is set, the resolved address is not where the request lands, so checking it proves nothing. The sidecar logs that it skipped the check.
+- **`ADVICE_ALLOW_CIDRS`** lets you accept your sandbox's range, e.g. `ADVICE_ALLOW_CIDRS=198.18.0.0/15`, without opening real private ranges.
+
+`198.18.0.0/15` (a benchmarking range, commonly used by sandbox proxies) is **not** blocked by default. Loopback, RFC1918, carrier-grade NAT, link-local and cloud metadata addresses still are.
+
+Whatever the network does, the money limits below and the per-purchase confirmation for untrusted sites do not change.
 
 ---
 
@@ -283,6 +304,12 @@ Node callers get all of this from the package: `buyAdviceWithLedger` from `@agen
 ---
 
 ## Changelog
+
+### 1.4.1
+
+- **Fix:** on VMs whose DNS maps every hostname to an egress proxy (e.g. `198.18.x.x`), the address check called every seller private and no purchase could go through. Trusted sites now skip that check, `198.18.0.0/15` is no longer blocked by default, `ADVICE_ALLOW_CIDRS` accepts a sandbox's range, and the check is skipped (with a log line) when `HTTPS_PROXY` means the resolved address isn't where the request lands.
+- DNS-independent hostname rules now apply to every seller: no IP literals, no `localhost`, no single-label or `*.internal`/`*.local`/`*.home.arpa` names.
+- New free `POST /preflight`: runs every check and the seller's 402 without paying, and reports `wouldBuy` plus the price. Added to the setup smoke test — `/health` alone hid this bug.
 
 ### 1.4.0
 

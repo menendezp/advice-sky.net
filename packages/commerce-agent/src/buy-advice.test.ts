@@ -31,7 +31,7 @@ describe("checkAdvicePurchaseTarget", () => {
     );
   });
 
-  it("refuses a confirmed purchase from a local address", async () => {
+  it("refuses an IP-literal seller outright, before resolving anything", async () => {
     const { assertPublicHost } = await import("./host-safety.js");
     await expect(
       checkAdvicePurchaseTarget({
@@ -39,7 +39,18 @@ describe("checkAdvicePurchaseTarget", () => {
         checkHost: assertPublicHost,
         confirmed: true,
       }),
-    ).rejects.toThrow(/local or private address/);
+    ).rejects.toThrow(/not a public seller hostname/);
+  });
+
+  it("refuses a named seller that resolves to a local address", async () => {
+    const { assertPublicHost } = await import("./host-safety.js");
+    await expect(
+      checkAdvicePurchaseTarget({
+        adviceUrl: "https://localhost.example.test/api",
+        checkHost: assertPublicHost,
+        confirmed: true,
+      }),
+    ).rejects.toThrow(/could not resolve|local or private address/);
   });
 
   it("uses the caller's trusted list", async () => {

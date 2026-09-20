@@ -10,9 +10,10 @@ import {
   recordSpendUsdLocal,
 } from "./daily-spend-ledger.js";
 import { assertPublicHost } from "./host-safety.js";
+import { preflightAdvice, type PreflightResult } from "./preflight.js";
 import { trustedAdviceHosts } from "./trusted-hosts.js";
 
-export { assertPublicHost, isNonPublicAddress } from "./host-safety.js";
+export { assertPublicHost, isNonPublicAddress, proxyInUse } from "./host-safety.js";
 export { readTrustedHostsFile, trustedAdviceHosts, trustedHostsPath } from "./trusted-hosts.js";
 export {
   readSpentTodayUsdLocal,
@@ -20,6 +21,8 @@ export {
   spendLedgerPath,
   utcDayKey,
 } from "./daily-spend-ledger.js";
+
+type PreflightOptions = Parameters<typeof preflightAdvice>[0];
 
 let purchaseQueue: Promise<unknown> = Promise.resolve();
 
@@ -45,6 +48,18 @@ export type BuyAdviceWithLedgerOptions = Omit<
  * purchase; every seller must resolve to a public address. Use this from any Node process that
  * spends from a wallet.
  */
+/** `preflightAdvice` with the operator's trusted list, address check and today's spend filled in. */
+export function preflightAdviceWithLedger(
+  opts: Omit<PreflightOptions, "trustedHosts" | "checkHost" | "spentTodayUsd">,
+): Promise<PreflightResult> {
+  return preflightAdvice({
+    ...opts,
+    trustedHosts: trustedAdviceHosts(),
+    checkHost: assertPublicHost,
+    spentTodayUsd: readSpentTodayUsdLocal(),
+  });
+}
+
 export function buyAdviceWithLedger(
   opts: BuyAdviceWithLedgerOptions,
 ): Promise<BuyAdviceResult> {

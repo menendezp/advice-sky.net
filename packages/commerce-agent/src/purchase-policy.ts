@@ -97,6 +97,23 @@ export type AdviceUrlCheck =
   | { ok: true; host: string; trusted: boolean }
   | { ok: false; reason: string };
 
+/** Names that can never belong to a public seller, whatever DNS answers. */
+const NON_PUBLIC_SUFFIXES = [".local", ".localhost", ".internal", ".intranet", ".lan", ".home.arpa"];
+const NON_PUBLIC_NAMES = ["localhost", "metadata.google.internal", "metadata.goog"];
+/** Bare IPv4/IPv6 literals; sellers are named hosts, and literals skip DNS entirely. */
+const IP_LITERAL = /^(\d{1,3}(\.\d{1,3}){3}|\[?[0-9a-f:]*:[0-9a-f:.]*\]?)$/i;
+
+/**
+ * Rules that hold without asking DNS anything, so they work the same on a normal host and
+ * inside a sandbox whose resolver rewrites every name (see host-safety.ts).
+ */
+function isStructurallyNonPublic(host: string): boolean {
+  if (NON_PUBLIC_NAMES.includes(host)) return true;
+  if (NON_PUBLIC_SUFFIXES.some((s) => host.endsWith(s))) return true;
+  if (!host.includes(".")) return true; // single-label: intranet name, never a public seller
+  return IP_LITERAL.test(host);
+}
+
 /**
  * Any https URL may be bought from; `trusted` says whether its host is on the operator's list.
  * Untrusted hosts need human confirmation per purchase and a public-address check before the
@@ -119,7 +136,13 @@ export function classifyAdviceUrl(
   if (parsed.username || parsed.password) {
     return { ok: false, reason: "adviceUrl must not contain credentials" };
   }
-  const host = parsed.hostname.toLowerCase();
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, "");
+  if (isStructurallyNonPublic(host)) {
+    return {
+      ok: false,
+      reason: `${host} is not a public seller hostname (IP literal or local/internal name); refusing to buy from it`,
+    };
+  }
   const trusted = trustedHosts.map((h) => h.trim().toLowerCase()).includes(host);
   return { ok: true, host, trusted };
 }

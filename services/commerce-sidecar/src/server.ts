@@ -4,6 +4,7 @@
  * GET  /health      — liveness, unauthenticated
  * GET  /spend         — today's recorded spend vs the daily cap
  * GET  /trusted-hosts — sellers bought from without per-purchase confirmation
+ * POST /preflight     — free dry run: every check plus the seller's 402, nothing paid
  * POST /buy-advice    — x402 purchase (USDC on Base). Trusted sellers buy within the caps; any
  *                       other https seller needs confirmed=true every time and must resolve to
  *                       a public address.
@@ -25,6 +26,8 @@ import {
 } from "@agentic/commerce-agent";
 import {
   buyAdviceWithLedger,
+  preflightAdviceWithLedger,
+  proxyInUse,
   readSpentTodayUsdLocal,
   trustedAdviceHosts,
   trustedHostsPath,
@@ -112,6 +115,30 @@ app.get("/spend", rateLimit, auth, (_req, res) => {
 // Read-only on purpose: changing the list is done by editing the file, never through this API.
 app.get("/trusted-hosts", rateLimit, auth, (_req, res) => {
   res.json({ hosts: trustedAdviceHosts(), file: trustedHostsPath() });
+});
+
+// Free: proves the whole path (checks, DNS, network, the seller's 402) without signing anything.
+app.post("/preflight", rateLimit, auth, async (req, res) => {
+  const body = (req.body ?? {}) as { adviceUrl?: unknown; confirmed?: unknown };
+  const adviceUrl = body.adviceUrl ?? DEFAULT_ADVICE_URL;
+  if (typeof adviceUrl !== "string") {
+    res.status(400).json({ error: "adviceUrl must be a string" });
+    return;
+  }
+  try {
+    const result = await preflightAdviceWithLedger({
+      adviceUrl,
+      confirmed: body.confirmed === true,
+    });
+    res.json({ ...result, proxy: proxyInUse() ?? null });
+  } catch (e) {
+    res.status(200).json({
+      adviceUrl,
+      wouldBuy: false,
+      reason: errorMessage(e),
+      proxy: proxyInUse() ?? null,
+    });
+  }
 });
 
 app.post("/buy-advice", rateLimit, auth, async (req, res) => {

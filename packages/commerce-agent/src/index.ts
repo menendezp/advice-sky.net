@@ -5,6 +5,7 @@ export {
   type BuyAdviceResult,
 } from "./buy-advice.js";
 export { extractDirectiveTokenIdFromAdvice } from "./advice-directive.js";
+export { preflightAdvice, type PreflightResult } from "./preflight.js";
 export {
   sendUsdcPayout,
   type SendUsdcPayoutOptions,

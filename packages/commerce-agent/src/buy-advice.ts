@@ -82,6 +82,10 @@ export async function checkAdvicePurchaseTarget(
 ): Promise<{ host: string; trusted: boolean }> {
   const url = classifyAdviceUrl(opts.adviceUrl, opts.trustedHosts ?? allowedAdviceHosts());
   if (!url.ok) throw new Error(url.reason);
+  // Trusted hosts skip the resolved-address check: the operator picked them, not the agent, so
+  // the SSRF this guards against does not apply — and on hosts whose DNS is rewritten by a
+  // sandbox egress proxy the check would otherwise block every seller. Structural hostname rules
+  // in classifyAdviceUrl still apply to every URL.
   if (!url.trusted) {
     if (!opts.checkHost) {
       throw new Error(
@@ -89,8 +93,6 @@ export async function checkAdvicePurchaseTarget(
       );
     }
     if (opts.confirmed !== true) throw new Error(`${url.host} is ${UNTRUSTED_NEEDS_CONFIRMATION}`);
-  }
-  if (opts.checkHost) {
     const safe = await opts.checkHost(url.host);
     if (!safe.ok) throw new Error(safe.reason);
   }
