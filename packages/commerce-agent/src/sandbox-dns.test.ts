@@ -35,11 +35,14 @@ describe("sandbox egress-proxy addresses", () => {
   });
 
   it("skips the address check when a proxy carries the request", async () => {
-    process.env.HTTPS_PROXY = "http://127.0.0.1:8080";
-    expect(proxyInUse()).toContain("HTTPS_PROXY");
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env.HTTPS_PROXY = "http://user:hunter2@127.0.0.1:8080";
+    expect(proxyInUse()).toBe("HTTPS_PROXY");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     // localhost would fail the resolved-address check on a normal host.
     await expect(assertPublicHost("127.0.0.1")).resolves.toEqual({ ok: true });
+    // The proxy URL carries credentials: never name it in logs or API responses.
+    expect(proxyInUse()).not.toContain("hunter2");
+    for (const call of warn.mock.calls) expect(String(call[0])).not.toContain("hunter2");
   });
 });
 

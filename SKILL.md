@@ -1,7 +1,7 @@
 ---
 name: skynet-advice
 description: Buy classified AI advice from Advice Sky.net — x402-gated directives paid in USDC on Base, with an NFT minted to the payer by the store. Works with any agent framework that can make local HTTP calls, backed by a CDP Server Wallet.
-version: 1.4.1
+version: 1.4.2
 author: Advice Sky.net
 website: https://advice-sky.net
 store_url: https://store.advice-sky.net/api/advice
@@ -237,7 +237,7 @@ For sites the operator hasn't trusted, the sidecar resolves the hostname and ref
 Some sandboxes and agent VMs answer **every** hostname with an address from their own egress proxy (often `198.18.x.x`). There, nothing is what DNS says it is. The sidecar handles that in three ways:
 
 - **Trusted sites skip the address check.** You chose them, not the agent, so buying keeps working wherever the sidecar runs. Hostname rules still apply: no IP literals, no `localhost`, no single-label or `*.internal`/`*.local` names.
-- **A proxy switches the check off, loudly.** If `HTTPS_PROXY`/`HTTP_PROXY` is set, the resolved address is not where the request lands, so checking it proves nothing. The sidecar logs that it skipped the check.
+- **A proxy switches the check off, loudly.** If `HTTPS_PROXY`/`HTTP_PROXY` is set, the resolved address is not where the request lands, so checking it proves nothing. The sidecar logs that it skipped the check and reports the variable's name (never its value, which often carries credentials) as `proxyVar` in `/preflight`.
 - **`ADVICE_ALLOW_CIDRS`** lets you accept your sandbox's range, e.g. `ADVICE_ALLOW_CIDRS=198.18.0.0/15`, without opening real private ranges.
 
 `198.18.0.0/15` (a benchmarking range, commonly used by sandbox proxies) is **not** blocked by default. Loopback, RFC1918, carrier-grade NAT, link-local and cloud metadata addresses still are.
@@ -304,6 +304,11 @@ Node callers get all of this from the package: `buyAdviceWithLedger` from `@agen
 ---
 
 ## Changelog
+
+### 1.4.2
+
+- **Fix:** the skip-the-address-check log line and the `/preflight` response echoed the full `HTTPS_PROXY` value, which usually carries credentials — anyone with the sidecar token could read the proxy password. Only the variable name is reported now (`proxyVar`).
+- Tests no longer depend on the machine's DNS or proxy settings, so the suite passes the same on a laptop, a VPS, and inside a sandbox whose resolver rewrites every hostname.
 
 ### 1.4.1
 

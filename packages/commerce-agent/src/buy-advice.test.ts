@@ -43,21 +43,29 @@ describe("checkAdvicePurchaseTarget", () => {
   });
 
   it("refuses a named seller whose resolver answers with a local address", async () => {
-    // A real lookup would depend on the network; simulate the answer instead.
+    // Hermetic: simulate the resolver, and ignore any proxy vars this machine happens to set
+    // (a proxy would make the sidecar skip the address check by design).
+    const proxyVars = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
+    const saved = Object.fromEntries(proxyVars.map((v) => [v, process.env[v]]));
+    for (const v of proxyVars) delete process.env[v];
     vi.doMock("node:dns/promises", () => ({
       lookup: async () => [{ address: "127.0.0.1", family: 4 }],
     }));
     vi.resetModules();
-    const { assertPublicHost } = await import("./host-safety.js");
-    await expect(
-      checkAdvicePurchaseTarget({
-        adviceUrl: "https://seller.example.com/api",
-        checkHost: assertPublicHost,
-        confirmed: true,
-      }),
-    ).rejects.toThrow(/local or private address/);
-    vi.doUnmock("node:dns/promises");
-    vi.resetModules();
+    try {
+      const { assertPublicHost } = await import("./host-safety.js");
+      await expect(
+        checkAdvicePurchaseTarget({
+          adviceUrl: "https://seller.example.com/api",
+          checkHost: assertPublicHost,
+          confirmed: true,
+        }),
+      ).rejects.toThrow(/local or private address/);
+    } finally {
+      for (const [v, value] of Object.entries(saved)) if (value !== undefined) process.env[v] = value;
+      vi.doUnmock("node:dns/promises");
+      vi.resetModules();
+    }
   });
 
   it("uses the caller's trusted list", async () => {

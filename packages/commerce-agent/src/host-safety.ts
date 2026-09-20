@@ -100,13 +100,16 @@ export function isNonPublicAddress(address: string): boolean {
 }
 
 /**
- * True when an HTTP proxy will carry the request: the address DNS returns is then not where the
- * request lands, so checking it proves nothing. Sandboxes that rewrite DNS work this way.
+ * The env var naming a proxy that will carry the request, or null. When one is set, the address
+ * DNS returns is not where the request lands, so checking it proves nothing; sandboxes that
+ * rewrite DNS work this way.
+ *
+ * Only the variable NAME is returned. A proxy URL usually carries credentials
+ * (http://user:pass@host:port), and this value reaches logs and the /preflight response.
  */
 export function proxyInUse(): string | null {
   for (const v of ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"]) {
-    const value = process.env[v]?.trim();
-    if (value) return `${v}=${value}`;
+    if (process.env[v]?.trim()) return v;
   }
   return null;
 }
@@ -120,7 +123,7 @@ export async function assertPublicHost(host: string): Promise<GuardrailResult> {
     if (!proxyNoticeLogged) {
       proxyNoticeLogged = true;
       console.warn(
-        `[host-safety] ${proxy}: requests go through a proxy, so resolved addresses are not where they land. ` +
+        `[host-safety] ${proxy} is set: requests go through a proxy, so resolved addresses are not where they land. ` +
           "Skipping the address check; hostname rules, the trusted list, confirmation and spend caps still apply.",
       );
     }

@@ -130,13 +130,13 @@ app.post("/preflight", rateLimit, auth, async (req, res) => {
       adviceUrl,
       confirmed: body.confirmed === true,
     });
-    res.json({ ...result, proxy: proxyInUse() ?? null });
+    res.json({ ...result, proxyVar: proxyInUse() ?? null });
   } catch (e) {
     res.status(200).json({
       adviceUrl,
       wouldBuy: false,
       reason: errorMessage(e),
-      proxy: proxyInUse() ?? null,
+      proxyVar: proxyInUse() ?? null,
     });
   }
 });
