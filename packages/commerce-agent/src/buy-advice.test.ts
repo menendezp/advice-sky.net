@@ -42,15 +42,22 @@ describe("checkAdvicePurchaseTarget", () => {
     ).rejects.toThrow(/not a public seller hostname/);
   });
 
-  it("refuses a named seller that resolves to a local address", async () => {
+  it("refuses a named seller whose resolver answers with a local address", async () => {
+    // A real lookup would depend on the network; simulate the answer instead.
+    vi.doMock("node:dns/promises", () => ({
+      lookup: async () => [{ address: "127.0.0.1", family: 4 }],
+    }));
+    vi.resetModules();
     const { assertPublicHost } = await import("./host-safety.js");
     await expect(
       checkAdvicePurchaseTarget({
-        adviceUrl: "https://localhost.example.test/api",
+        adviceUrl: "https://seller.example.com/api",
         checkHost: assertPublicHost,
         confirmed: true,
       }),
-    ).rejects.toThrow(/could not resolve|local or private address/);
+    ).rejects.toThrow(/local or private address/);
+    vi.doUnmock("node:dns/promises");
+    vi.resetModules();
   });
 
   it("uses the caller's trusted list", async () => {
